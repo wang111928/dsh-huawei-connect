@@ -1,0 +1,10 @@
+# 1. GitHub 登录（浏览器授权）
+gh auth login --hostname github.com --git-protocol https --web
+
+# 2. 建仓并推送
+cd D:\py\dsh-huawei-connect
+gh repo create wang111928/dsh-huawei-connect --public --source=. --remote=origin --push
+
+# 3. npm 登录并发布（官方 registry）
+npm login --registry=https://registry.npmjs.org/
+npm publish --registry=https://registry.npmjs.org/ --access public

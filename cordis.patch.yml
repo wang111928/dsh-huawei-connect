@@ -1,0 +1,6 @@
+# Register the two Huawei provider routes without changing the profile's
+# default model. Both routes are driven through this plugin's loopback shim;
+# no separate CLI is required.
+- insert:
+    - id: llm-huawei-connect
+      name: dsh-huawei-connect
