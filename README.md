@@ -6,14 +6,14 @@
 
 ## 功能
 
-- **两个平台、两条路由**：\`codearts\` 与 \`officeace\` 各自出现在 DSH 的模型选择器里。
+- **两个平台、两条路由**：`codearts` 与 `officeace` 各自出现在 DSH 的模型选择器里。
   可以只用其中一个，也可以两个一起用。
-- **积分余量**：码道走 \`/snap-manager/v1/statistics/plugin\`（实测体验版 10500 分），
-  果办走本机控制面 \`/api/subscription/current\`（实测 4600 分）与
-  \`/api/codeagent-package/usage\`（码道兼容包剩余）。两个平台的额度口径不同，卡片
+- **积分余量**：码道走 `/snap-manager/v1/statistics/plugin`（实测体验版 10500 分），
+  果办走本机控制面 `/api/subscription/current`（实测 4600 分）与
+  `/api/codeagent-package/usage`（码道兼容包剩余）。两个平台的额度口径不同，卡片
   分开显示，互不影响。
 - **模型勾选**：卡片里按平台勾选，写回宿主 settings，模型选择器实时生效。
-- **登录态自动发现**：码道读 \`dsh-codearts\` 已有的账号文件，果办读 Windows 凭据管理器。
+- **登录态自动发现**：码道读 `dsh-codearts` 已有的账号文件，果办读 Windows 凭据管理器。
   两边都**只读**，都不要求用户重复登录。
 - **请求伪装**：按官方客户端的请求形态构造（身份头、字段白名单、认证方式），
   详见 [§4](#4-请求伪装实测依据)。
@@ -21,14 +21,30 @@
 
 ## 安装
 
-放在 DSH profile 的 node_modules 下并在 profile 里登记：
+本插件以源码形式托管在 GitHub，尚未发布到 npm registry。安装有两种方式，任选其一：
 
-\`\`\`sh
+### 方式 A：从 GitHub 源码安装（推荐）
+
+```sh
+# 把仓库克隆到 DSH profile 的 node_modules 下
 PROFILE="$HOME/.dsh/profiles/desktop"
-cp -r package.json lib cordis.patch.yml "$PROFILE/node_modules/dsh-huawei-connect/"   # 先建目录
-# 然后在 $PROFILE/package.json 的 dependencies 里加 "dsh-huawei-connect": "1.0.0"
-# 并在 dependencies / bundles 里登记，最后重启 DSH
-\`\`\`
+cd "$PROFILE/node_modules"
+git clone https://github.com/wang111928/dsh-huawei-connect.git dsh-huawei-connect
+# 若已存在旧目录，先删除再 clone
+# 然后在 $PROFILE/package.json 的 dependencies 里加条依赖并重启 DSH
+```
+
+> 说明：本插件依赖的 `@deepseek-ai/*` peer 包与 `react` 在你的 profile 里通常已具备；
+> 若首次拷贝后启动报缺包，在 profile 根目录执行一次 `pnpm install` 即可。
+
+### 方式 B：纯文件拷贝（已有本仓库源码时）
+
+```sh
+PROFILE="$HOME/.dsh/profiles/desktop"
+mkdir -p "$PROFILE/node_modules/dsh-huawei-connect"
+cp -r package.json lib cordis.patch.yml "$PROFILE/node_modules/dsh-huawei-connect/"
+# 在 $PROFILE/package.json 的 dependencies 里登记 "dsh-huawei-connect": "1.2.0"，然后重启 DSH
+```
 
 重启 DSH → 设置 → 插件 → **华为双平台** 卡片 → 「同步登录态」。
 
@@ -36,23 +52,23 @@ cp -r package.json lib cordis.patch.yml "$PROFILE/node_modules/dsh-huawei-connec
 
 | 平台 | 需要 |
 |---|---|
-| 码道 | 用码道桌面端登录过（或装过 \`dsh-codearts\` 并登录）。读 \`$DSH_HOME/.codearts-accounts.json\` |
-| 果办 | 打开果办并登录。读 Windows 凭据管理器 \`OfficeAce/auth-sessions/...\` 与 \`~/.office-claw/session.cookie\` |
+| 码道 | 用码道桌面端登录过（或装过 `dsh-codearts` 并登录）。读 `$DSH_HOME/.codearts-accounts.json` |
+| 果办 | 打开果办并登录。读 Windows 凭据管理器 `OfficeAce/auth-sessions/...` 与 `~/.office-claw/session.cookie` |
 
 ## 使用
 
 1. 设置 → 插件 → 华为双平台 → **同步登录态**。
 2. 卡片上会显示每个平台的账号、积分余量、模型数。
-3. 新建对话 → 模型选择器里选 \`码道 CodeArts\` 或 \`果办 OfficeAce\` 下的模型。
+3. 新建对话 → 模型选择器里选 `码道 CodeArts` 或 `果办 OfficeAce` 下的模型。
 4. 想只留几个模型：在卡片里点掉其它模型 → **保存选择**。
 
 ### 命令行
 
-\`\`\`sh
+```sh
 node lib/bin.mjs status    # 账号、积分、套餐（不含任何密钥，可直接贴出来）
 node lib/bin.mjs models    # 上游真实模型清单
 node lib/bin.mjs sync      # 从上游同步登录态
-\`\`\`
+```
 
 ## 3. 登录与账号池
 
@@ -268,30 +284,30 @@ retainTokens   = 196608 * 0.16 = 31457    < threshold ✓
 
 ## 6. 架构
 
-\`\`\`
+```
 DSH 对话窗口
    |  OpenAI /chat/completions（Bearer = 本进程随机 secret）
    v
 dsh-huawei-connect shim（127.0.0.1:随机端口）
    |-- /codearts/v1/...  → x-auth-token + AK/SK 签名 + Agent-Type → snap-access.../api/v2/chat/completions
    |-- /officeace/v1/... → Basic(appKey:appSecret)               → modelgw-.../v2/chat/completions
-\`\`\`
+```
 
 - shim 只监听回环、校验 Host/Origin/Bearer（常量时间比对）；上游真凭证永远不出进程。
-- 码道的 SSE 有华为特有帧（\`reasoning_content\`、累积快照、帧内 \`error_code\`），
+- 码道的 SSE 有华为特有帧（`reasoning_content`、累积快照、帧内 `error_code`），
   逐帧翻译成标准 OpenAI chunk；果办本来就是标准 SSE，**原样透传**。
 - 模型目录启动时与每小时各刷新一次，失败保留旧目录（选择器不会空掉）。
 
 ## 7. 已知限制
 
 - **码道每账号 3 并发会话，占满约 1 分钟**（见 §4.4）。
-- **码道凭证有效期约 24 小时**，由 \`dsh-codearts\` 负责续期；本插件只读它的账号文件，
-  不抢刷新职责（两个插件同时用一个 \`refresh_token\` 会让其中一个失效）。
+- **码道凭证有效期约 24 小时**，由 `dsh-codearts` 负责续期；本插件只读它的账号文件，
+  不抢刷新职责（两个插件同时用一个 `refresh_token` 会让其中一个失效）。
 - **果办积分接口要求本机会话**：必须开着果办并保持登录，关掉就报"读不到会话"。
   它的 TLS 是自签的，插件对此只在本机回环请求上放宽证书校验。
 - 积分是**账号级**口径，没有"这一次请求花了多少分"的明细；卡片显示的是账号余额，
   官方明细请走各平台控制台。
-- 模型的能力（是否支持图片、上下文长度）部分靠 id 推断：上游 \`/models\` 只给 id。
+- 模型的能力（是否支持图片、上下文长度）部分靠 id 推断：上游 `/models` 只给 id。
 
 ## 8. 免责声明
 

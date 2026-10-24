@@ -25,8 +25,25 @@ with credit balances, per-model toggles, and requests shaped like the official c
 
 ## Install
 
+This plugin is hosted as source on GitHub and is not published to the npm registry yet.
+Install either way below:
+
+### From GitHub source (recommended)
+
 ```sh
-dsh plugin --profile web add dsh-huawei-connect
+PROFILE="$HOME/.dsh/profiles/desktop"
+cd "$PROFILE/node_modules"
+git clone https://github.com/wang111928/dsh-huawei-connect.git dsh-huawei-connect
+# register in $PROFILE/package.json dependencies, then restart DSH
+```
+
+### Manual copy
+
+```sh
+PROFILE="$HOME/.dsh/profiles/desktop"
+mkdir -p "$PROFILE/node_modules/dsh-huawei-connect"
+cp -r package.json lib cordis.patch.yml "$PROFILE/node_modules/dsh-huawei-connect/"
+# register "dsh-huawei-connect": "1.2.0" in $PROFILE/package.json dependencies, then restart DSH
 ```
 
 Then open **Settings → Plugins → DSH Huawei Connect**, sign in to either platform, and pick models.

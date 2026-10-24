@@ -1,10 +1,13 @@
-# 1. GitHub 登录（浏览器授权）
-gh auth login --hostname github.com --git-protocol https --web
+# dsh-huawei-connect 发布步骤（当前状态：GitHub 已发布，npm 未发布）
 
-# 2. 建仓并推送
-cd D:\py\dsh-huawei-connect
-gh repo create wang111928/dsh-huawei-connect --public --source=. --remote=origin --push
+## ✅ 已完成：GitHub
+- 仓库: https://github.com/wang111928/dsh-huawei-connect （public）
+- Release v1.2.0 + main 分支保护（PR-only）
 
-# 3. npm 登录并发布（官方 registry）
+## 安装（当前为源码 / git 方式）
+git clone https://github.com/wang111928/dsh-huawei-connect.git "$HOME/.dsh/profiles/desktop/node_modules/dsh-huawei-connect"
+
+## ⏸ npm 发布（暂缓）
+以下命令需 npm 账号(wangqwer)具备可绕过 2FA 的发布 token，当前因 2FA 限制暂未执行：
 npm login --registry=https://registry.npmjs.org/
 npm publish --registry=https://registry.npmjs.org/ --access public
