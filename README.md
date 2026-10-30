@@ -12,7 +12,7 @@
   果办走本机控制面 `/api/subscription/current`（实测 4600 分）与
   `/api/codeagent-package/usage`（码道兼容包剩余）。两个平台的额度口径不同，卡片
   分开显示，互不影响。
-- **模型勾选**：卡片里按平台勾选，写回宿主 settings，模型选择器实时生效。
+- **模型勾选**：卡片里**按平台**勾选（码道一栏、果办一栏互不牵连），写回宿主 settings，模型选择器实时生效。勾只代表「明确勾上」；某一栏一个都不勾 = 该平台不限制（全部开放），此时该栏会写明「不限制」。点一行只改这一行。
 - **登录态自动发现**：码道读 `dsh-codearts` 已有的账号文件，果办读 Windows 凭据管理器。
   两边都**只读**，都不要求用户重复登录。
 - **请求伪装**：按官方客户端的请求形态构造（身份头、字段白名单、认证方式），
@@ -21,32 +21,39 @@
 
 ## 安装
 
-本插件以源码形式托管在 GitHub，尚未发布到 npm registry。安装有两种方式，任选其一：
+本插件是一个标准的 DSH 组合包（bundle）：宿主读 `package.json` 的 `dsh.bundle.patch`
+装载服务端，读 `exports["./client"]` 装载浏览器端设置卡片。所以它走宿主的插件安装通道，
+不需要手工往 `node_modules` 里拷文件。
 
-### 方式 A：从 GitHub 源码安装（推荐）
+兼容性写在 `engines.dsh: ">=0.1.7-rc.1 <0.3.0-0"` 里：宿主版本落在区间外时安装会被
+明确拒绝（而不是装上去再崩）。当前桌面端 `0.2.1-rc.5`、`dsh web 0.2.1` 都在区间内。
 
-```sh
-# 把仓库克隆到 DSH profile 的 node_modules 下
-PROFILE="$HOME/.dsh/profiles/desktop"
-cd "$PROFILE/node_modules"
-git clone https://github.com/wang111928/dsh-huawei-connect.git dsh-huawei-connect
-# 若已存在旧目录，先删除再 clone
-# 然后在 $PROFILE/package.json 的 dependencies 里加条依赖并重启 DSH
-```
-
-> 说明：本插件依赖的 `@deepseek-ai/*` peer 包与 `react` 在你的 profile 里通常已具备；
-> 若首次拷贝后启动报缺包，在 profile 根目录执行一次 `pnpm install` 即可。
-
-### 方式 B：纯文件拷贝（已有本仓库源码时）
+### 方式 A：压缩包（当前可直接用）
 
 ```sh
-PROFILE="$HOME/.dsh/profiles/desktop"
-mkdir -p "$PROFILE/node_modules/dsh-huawei-connect"
-cp -r package.json lib cordis.patch.yml "$PROFILE/node_modules/dsh-huawei-connect/"
-# 在 $PROFILE/package.json 的 dependencies 里登记 "dsh-huawei-connect": "1.2.0"，然后重启 DSH
+# 下载 dsh-huawei-connect-1.3.4.tgz 后，把它指给宿主自己的插件安装器：
+dsh plugin --profile <你的 profile> add file:/绝对路径/dsh-huawei-connect-1.3.4.tgz
 ```
 
-重启 DSH → 设置 → 插件 → **华为双平台** 卡片 → 「同步登录态」。
+桌面端（DSH Desktop）请用它自己的 **设置 → 插件** 装：那个 profile 归应用的插件管理器
+所有，应用运行期间命令行改不了它。选「从本地压缩包安装」并指向同一个 `.tgz` 即可。
+
+### 方式 B：npm（发布后）
+
+```sh
+dsh plugin --profile <你的 profile> add dsh-huawei-connect@1.3.4
+```
+
+### 方式 C：固定提交的 git（可复现，但需要仓库里有这个提交）
+
+```sh
+dsh plugin --profile <你的 profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#<40位提交>
+```
+
+> 不要手动 `git clone` 到 `node_modules`：那样装出来的目录不带 profile 的依赖解析与
+> 兼容性校验，升级、卸载、备份都不认它。
+
+装好后重启 DSH → 设置 → 插件 → **华为双平台** 卡片 → 「同步登录态」。
 
 ### 前置条件
 
@@ -300,6 +307,13 @@ dsh-huawei-connect shim（127.0.0.1:随机端口）
 
 ## 7. 已知限制
 
+- **码道要求中间转发层放行它的签名请求**：码道用 `SDK-HMAC-SHA256` 签名，凡是会重写请求体的
+  代理（例如本机同时装了 `billion-context`）都会让签名失效，于是它默认**拒收**并回
+  `403 signed_request_requires_resign`，表现是「每一轮都失败」。放行方式（已实测）：在
+  `%USERPROFILE%\.config\billion-context\billion-context.json` 里写
+  `{"resign":{"sdk-hmac-sha256":{"passthrough":true}}}`，或设环境变量 `BILI_RESIGN_PASSTHROUGH=1`；
+  另一种是给它一个签名凭据让它重签。没有放行时，宿主 UI 可能把它显示成**「API 密钥无效」**——
+  那是错误分类把报文里的 403 当成了鉴权失败，不是账号或密钥有问题（1.3.3 起本插件不再让它这么显示）。
 - **码道每账号 3 并发会话，占满约 1 分钟**（见 §4.4）。
 - **码道凭证有效期约 24 小时**，由 `dsh-codearts` 负责续期；本插件只读它的账号文件，
   不抢刷新职责（两个插件同时用一个 `refresh_token` 会让其中一个失效）。

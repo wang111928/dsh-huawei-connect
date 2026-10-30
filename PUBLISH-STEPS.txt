@@ -1,13 +1,88 @@
-# dsh-huawei-connect 发布步骤（当前状态：GitHub 已发布，npm 未发布）
+# dsh-huawei-connect 发布状态（1.3.4）
+
+## ✅ 已完成：打包成可直接安装的 DSH 组合包
+- `package.json` 增补 `engines.dsh` 为 >=0.1.7-rc.1 <0.3.0-0，兼容性一条决定；
+  当前桌面端运行时 0.2.1-rc.5 在区间内（已用宿主同一个 semver 判定复核）。
+- peer 范围与同宿主上已验证可用的 dsh-connect-trae@4.6.4 对齐；`@earendil-works/pi-ai` 标 optional。
+- 不再把 `@deepseek-ai/dsh-client-ui-primitives` 写成 peer：它是 Web 前端的静态种子模块
+  （`staticModules` 里有，node_modules 里没有）。客户端依赖改由 `dsh.client.inject` 表达。
+- `npm pack` 产物：`dsh-huawei-connect-1.3.4.tgz`（24 个文件，新增 `lib/enabled.mjs`）。
+- 已在 DSH 桌面端 profile 里用压缩包装上并核对。
+
+## ✅ 已完成：1.3.1 修复码道反复 503「还没有可用的账号」
+- 根因：转发层拒收 SDK-HMAC-SHA256 签名请求（`signed_request_requires_resign` /
+  `bili_resign_unavailable`），该报文落进 401/403 → authentication 兜底，
+  账号被 `disable()` 停用 1 小时；`rank()` 又把停用账号剔除，于是 shim 在发请求前
+  就回 503 unconfigured，而「同步登录态」从来不解除停用 —— 只能重启或等满一小时。
+- 修复：新增 `proxy_refused` 分类（不停用/不冷却/不换号/如实报因）；只有 401 算凭证失效，
+  裸 403 降级为 15 秒可恢复冷却；`model_unavailable` 按报文判定（403/404 都认）；
+  「同步登录态」现在会解除池里的停用与冷却；503 文案带上真实原因；池快照补
+  `disabledRemainingMs` / `blockedRemainingMs`。
+- 回归断言：`node _hwtest_classify.mjs` 全部通过（分类 9 项 + 池行为 7 项）。
+
+## ✅ 已完成：1.3.2 账号池改为显式开关（默认单账号）+ 模型清单改逐行列表
+- 账号池默认关闭：日常单账号、不轮转。新增 `pickSingle`——健康度只用来「挑」不用来「删」，
+  所以单账号模式不会再出现「候选为空 → 503 unconfigured」这条连锁。
+- 两个平台同一份逻辑：新增 `GET/POST /api/huawei-connect/pool`（持久化 `poolEnabled`），
+  状态快照新增 `poolEnabled` / `activeAccount`。
+- 卡片：账号池独立成按钮 + 状态标签；模型清单与账号列表都改成逐行列表（原来是 flex-wrap 的 chip 流，
+  两处挤在一起）。
+- 回归断言：宿主端 `_hwtest_classify.mjs` 与客户端渲染 `_hwc_render_smoke.mjs`
+  （码道=账号池已启用、果办=单账号模式，共 15 项）全部通过。
+
+## ✅ 已完成：1.3.4 模型勾选改成「按平台 + 只改一行」
+- 用户实测报的 bug：清单为空（= 不限制，全部开放）时列表把每一行都渲染成打着勾，
+  而点击只是普通 toggle，于是点第一行就变成「只剩这一行」。现在勾只代表「明确勾上」，
+  空清单显示状态行「不限制：该平台的全部模型都开放」，点一行只改这一行；
+  按钮改为「全部勾选」/「不限（全部开放）」。
+- 勾选清单从一份全局改成按平台一份（settings `enabledModels` 现在是
+  `{ codearts: [...], officeace: [...] }`）。旧形状（扁平数组）启动时按目录归属自动迁移，
+  目录里都找不到的 id 落到码道，不丢既有选择；迁移逻辑在 `lib/enabled.mjs`。
+- 保存一次写整份记录，切栏不丢改动。
+- 回归：`node _hwc_models_smoke.mjs` 14/14（真点行、真读勾，含用户报的那一幕）；
+  `node _hwtest_enabled.mjs` 21/21（迁移与清洗）。
+
+## ✅ 已完成：1.3.3 让码道真的能用（并解释「API 密钥无效」从哪来）
+- 真正的一步在 bili 侧：码道用 `SDK-HMAC-SHA256` 签名，billion-context 默认拒收签名请求
+  （找不到重签凭据），回 403 `signed_request_requires_resign`。给内置方案开原样放行即可——
+  配置键是 `sdk-hmac-sha256`（不是 `hmac-sha256`）：
+  `%USERPROFILE%\.config\billion-context\billion-context.json` 写入
+  `{"resign":{"sdk-hmac-sha256":{"passthrough":true}}}`，或设 `BILI_RESIGN_PASSTHROUGH=1`。
+  **改完立即生效，不用重启 DSH**（bili 每次请求重读配置）。
+- 「密钥无效」的来源：shim 把上游报文嵌入错误文本 → 宿主 `classifyPiAiError` 见独立 401/403
+  即判 `AUTH` → 聊天 UI 渲染成「API 密钥无效」。插件侧已加 `hostSafeText()` 把非认证类文案里
+  的 401/403 抹成 `4xx`；回环闸门（Host/Origin 不匹配）由 403 改 400。
+- `TM.00001001` 由 soft_rate 改判 client（实测是「Agent-Type 为空」「model 不合法」这类形状错误）。
+- 验证：bili 日志 `... sdk-hmac-sha256-signed model request forwarded DIRECT ...`；
+  宿主进程内跑 `codearts/deepseek-v4.1-flash-1017` 任务卡片 `succeeded`；
+  插件状态码道 `successes 0 → 1`、`failures` 不再增长、`lastError` 清空；
+  回归 `node _hwtest_hostsafe.mjs` 15/15 通过。
 
 ## ✅ 已完成：GitHub
 - 仓库: https://github.com/wang111928/dsh-huawei-connect （public）
-- Release v1.2.0 + main 分支保护（PR-only）
+- Release v1.2.0；main 分支保护（PR-only）
 
-## 安装（当前为源码 / git 方式）
-git clone https://github.com/wang111928/dsh-huawei-connect.git "$HOME/.dsh/profiles/desktop/node_modules/dsh-huawei-connect"
+## ⏸ 待办：npm 发布（本机 token 已失效）
+`~/.npmrc` 里 `//registry.npmjs.org/:_authToken` 存在但已失效：
+`npm whoami --registry=https://registry.npmjs.org/` 返回 401。
+换一个有效 token（需可绕开 2FA 的 automation token）后执行：
 
-## ⏸ npm 发布（暂缓）
-以下命令需 npm 账号(wangqwer)具备可绕过 2FA 的发布 token，当前因 2FA 限制暂未执行：
-npm login --registry=https://registry.npmjs.org/
-npm publish --registry=https://registry.npmjs.org/ --access public
+  npm publish --registry=https://registry.npmjs.org/ --access public
+
+发布成功后，安装指令即可从方式 A（压缩包）换成方式 B（dsh-huawei-connect@1.3.4）。
+
+## ⏸ 待办：把 1.3.0–1.3.4 一起提交并打 tag（git 方式安装依赖它）
+
+工作区里 1.3.0 的打包改动、1.3.1 的停用修复、1.3.2 的账号池开关、1.3.3 的密钥无效文案、
+1.3.4 的模型勾选（按平台 + 点击只改一行）都还没提交，一次提交 + 一个 tag 即可同时覆盖：
+
+  git add -A && git commit -m "feat: 1.3.4 — 可直接安装 + 码道 503/签名放行 + 账号池显式开关 + 密钥无效文案 + 模型勾选按平台"
+  git tag v1.3.4 && git push origin main --tags
+
+推上去之后，方式 C 的 40 位提交号用 `git rev-parse v1.3.4` 的结果填。
+
+## ✅ 必须重启桌面端
+宿主端（`lib/index.mjs` 的路由与账号挑选）改动只在插件重新加载后生效；
+客户端（`lib/client/index.js`）改动需要 `pnpm run dev:web` 在跑才会热重载，否则也要重启。
+注意：bili 的签名放行**不需要**重启（配置热读），所以「码道能不能用」和「插件新代码生不生效」
+是两件独立的事——重启解决的是后者。
