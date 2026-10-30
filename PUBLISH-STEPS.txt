@@ -72,6 +72,9 @@
   `lib/index.mjs`、`lib/disguise.mjs`、`lib/pool.mjs`、`lib/shim.mjs`、`lib/enabled.mjs`、
   `lib/client/index.js` 的 md5 完全一致，且 `node --check` 全部通过。
 - 对 GitHub 装出来那一份跑功能断言（`_hwtest_ghinstall.mjs`）13/13 通过。
+- 已建 **Release v1.3.4**：https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4（release id 429218179），
+  附件 `dsh-huawei-connect-1.3.4.tgz` 92,623 字节，sha256
+  `50aa9ae52361aebb05958415e00df2306b620c857fb146a71cf5dfa20e691631`——与本地已测产物逐字节相同（GitHub 返回的 digest 一致）。
 
 ## ⏸ 待办：npm 发布（本机 token 已失效）
 `~/.npmrc` 里 `//registry.npmjs.org/:_authToken` 存在但已失效：
