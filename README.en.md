@@ -33,26 +33,38 @@ Compatibility is declared once, as `engines.dsh: ">=0.1.7-rc.1 <0.3.0-0"`. A hos
 that range refuses the install with a named reason instead of loading and crashing later.
 The current desktop runtime (`0.2.1-rc.5`) and `dsh web 0.2.1` are both inside it.
 
-### A. Tarball (works today)
+### A. Install straight from the GitHub link (recommended; verified)
+
+```sh
+# the 1.3.4 release tag
+dsh plugin --profile <your profile> add github:wang111928/dsh-huawei-connect#v1.3.4
+# to pin one exact commit, swap #v1.3.4 for the 40-char SHA:
+#   ... add github:wang111928/dsh-huawei-connect#<40-char commit>
+```
+
+`dsh plugin` forwards its remaining arguments to pnpm inside the profile directory (its own
+help text says so), so any spec pnpm accepts works. Verified on a brand-new profile: the
+profile is initialized, the source is fetched from GitHub, and it finishes in about a minute
+reporting `+ dsh-huawei-connect 1.3.4`; the profile's `package.json` then records
+`git+https://github.com/wang111928/dsh-huawei-connect.git#v1.3.4`, which upgrade, uninstall and
+backup all honour. The first fetch occasionally times out — just retry.
+
+On DSH Desktop use its own **Settings → Plugins** flow instead: that profile belongs to the
+app's plugin manager, and the CLI cannot change it while the app is running. Enter the same
+spec in its Git/GitHub install field.
+
+### B. Tarball (offline, or when GitHub is unreachable)
 
 ```sh
 dsh plugin --profile <your profile> add file:/absolute/path/dsh-huawei-connect-1.3.4.tgz
 ```
 
-On DSH Desktop use its own **Settings → Plugins** flow instead: that profile belongs to the
-app's plugin manager, and the CLI cannot change it while the app is running. Point it at the
-same `.tgz`.
+On DSH Desktop pick "install from local tarball" and point it at the same `.tgz`.
 
-### B. npm (after publishing)
+### C. npm (not published yet)
 
 ```sh
 dsh plugin --profile <your profile> add dsh-huawei-connect@1.3.4
-```
-
-### C. Pinned git commit (reproducible; the commit must already exist upstream)
-
-```sh
-dsh plugin --profile <your profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#<40-char commit>
 ```
 
 Then open **Settings → Plugins → DSH Huawei Connect**, sign in to either platform, and pick models.

@@ -28,26 +28,38 @@
 兼容性写在 `engines.dsh: ">=0.1.7-rc.1 <0.3.0-0"` 里：宿主版本落在区间外时安装会被
 明确拒绝（而不是装上去再崩）。当前桌面端 `0.2.1-rc.5`、`dsh web 0.2.1` 都在区间内。
 
-### 方式 A：压缩包（当前可直接用）
+### 方式 A：从 GitHub 链接直接安装（推荐，已实测）
+
+```sh
+# 1.3.4 的发布标签
+dsh plugin --profile <你的 profile> add github:wang111928/dsh-huawei-connect#v1.3.4
+# 想钉死到某一次提交，把 #v1.3.4 换成 40 位提交号即可：
+#   ... add github:wang111928/dsh-huawei-connect#<40位提交>
+```
+
+`dsh plugin` 后面的参数是**原样转交**给 profile 目录里的 pnpm 的（官方帮助：
+"forwards the remaining arguments to pnpm in the profile directory"），所以 pnpm 支持的
+spec 都能装。实测（全新 profile、非拷贝）：初始化 profile 后从 GitHub 拉源码，
+约 1 分钟装完并报 `+ dsh-huawei-connect 1.3.4`；profile 的 `package.json` 里记录成
+`git+https://github.com/wang111928/dsh-huawei-connect.git#v1.3.4`，之后的升级、卸载、
+备份都认这条记录。首次拉取偶尔会网络超时，重试即可。
+
+桌面端（DSH Desktop）请用它自己的 **设置 → 插件** 装：那个 profile 归应用的插件管理器
+所有，应用运行期间命令行改不了它。在「从 Git / GitHub 安装」里填同一个 spec 即可。
+
+### 方式 B：压缩包（离线，或访问不到 GitHub 时）
 
 ```sh
 # 下载 dsh-huawei-connect-1.3.4.tgz 后，把它指给宿主自己的插件安装器：
 dsh plugin --profile <你的 profile> add file:/绝对路径/dsh-huawei-connect-1.3.4.tgz
 ```
 
-桌面端（DSH Desktop）请用它自己的 **设置 → 插件** 装：那个 profile 归应用的插件管理器
-所有，应用运行期间命令行改不了它。选「从本地压缩包安装」并指向同一个 `.tgz` 即可。
+桌面端选「从本地压缩包安装」并指向同一个 `.tgz`。
 
-### 方式 B：npm（发布后）
+### 方式 C：npm（尚未发布）
 
 ```sh
 dsh plugin --profile <你的 profile> add dsh-huawei-connect@1.3.4
-```
-
-### 方式 C：固定提交的 git（可复现，但需要仓库里有这个提交）
-
-```sh
-dsh plugin --profile <你的 profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#<40位提交>
 ```
 
 > 不要手动 `git clone` 到 `node_modules`：那样装出来的目录不带 profile 的依赖解析与

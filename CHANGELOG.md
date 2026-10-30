@@ -2,6 +2,19 @@
 
 ## 1.3.4
 
+### 发布：可以直接用 GitHub 链接安装
+
+仓库已发布到 https://github.com/wang111928/dsh-huawei-connect，打完 tag `v1.3.4` 之后
+一行命令即可安装（`dsh plugin` 的参数是原样转交给 profile 里的 pnpm 的）：
+
+```sh
+dsh plugin --profile <你的 profile> add github:wang111928/dsh-huawei-connect#v1.3.4
+```
+
+已在全新 profile 上实测：装出 `dsh-huawei-connect 1.3.4`，并 `--dump-config` 确认插件
+组装进了 profile 树；装出来的文件与本地已测版本只差行尾（LF/CRLF），内容逐字节等价。
+压缩包那份仍然可用，作为离线方式。
+
 ### 修复：模型勾选列表——点一行会把其它行的勾全抹掉
 
 用户实测复现（原话：「我选的时最上面的模型，但你其他所有模型前面的对号被取消」）：

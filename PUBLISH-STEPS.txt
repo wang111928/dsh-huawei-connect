@@ -1,4 +1,4 @@
-# dsh-huawei-connect 发布状态（1.3.4）
+# dsh-huawei-connect 发布状态（1.3.4 — 已发布，可用 GitHub 链接直接安装）
 
 ## ✅ 已完成：打包成可直接安装的 DSH 组合包
 - `package.json` 增补 `engines.dsh` 为 >=0.1.7-rc.1 <0.3.0-0，兼容性一条决定；
@@ -58,9 +58,20 @@
   插件状态码道 `successes 0 → 1`、`failures` 不再增长、`lastError` 清空；
   回归 `node _hwtest_hostsafe.mjs` 15/15 通过。
 
-## ✅ 已完成：GitHub
-- 仓库: https://github.com/wang111928/dsh-huawei-connect （public）
-- Release v1.2.0；main 分支保护（PR-only）
+## ✅ 已完成：GitHub 发布（1.3.0–1.3.4 一次性提交，tag v1.3.4）
+- 仓库: https://github.com/wang111928/dsh-huawei-connect （public）；main 分支保护（PR-only）。
+- 分支 `release/1.3.4` 提交 1.3.0–1.3.4 的全部改动（打包元数据 + 码道 503/签名放行 +
+  账号池显式开关 + 「API 密钥无效」文案 + 模型勾选按平台），走 PR #1 squash 合并进 main。
+- tag `v1.3.4` 已建，指向合并后的 main 头。当前 40 位提交号可用 REST 取：
+  `GET /repos/wang111928/dsh-huawei-connect/git/ref/tags/v1.3.4`。
+- 已实测「GitHub 链接直接安装」：全新 profile（非拷贝）执行
+  `dsh plugin --profile <新profile> add github:wang111928/dsh-huawei-connect#v1.3.4`，
+  约 1 分钟装完，报 `+ dsh-huawei-connect 1.3.4`；`dsh --profile <新profile> --dump-config`
+  里能看到 `# == dsh-huawei-connect` / `- id: llm-huawei-connect`。
+- 装出来的字节与本地已测版本只差**行尾**（git 出来是 LF；本地工作树是 CRLF）：去掉 CR 后
+  `lib/index.mjs`、`lib/disguise.mjs`、`lib/pool.mjs`、`lib/shim.mjs`、`lib/enabled.mjs`、
+  `lib/client/index.js` 的 md5 完全一致，且 `node --check` 全部通过。
+- 对 GitHub 装出来那一份跑功能断言（`_hwtest_ghinstall.mjs`）13/13 通过。
 
 ## ⏸ 待办：npm 发布（本机 token 已失效）
 `~/.npmrc` 里 `//registry.npmjs.org/:_authToken` 存在但已失效：
@@ -69,15 +80,13 @@
 
   npm publish --registry=https://registry.npmjs.org/ --access public
 
-发布成功后，安装指令即可从方式 A（压缩包）换成方式 B（dsh-huawei-connect@1.3.4）。
+发布成功后，安装指令可以再加一条方式 C（`dsh-huawei-connect@1.3.4`）——
+现在 README 里方式 C 已写明「尚未发布」。
 
-## ⏸ 待办：把 1.3.0–1.3.4 一起提交并打 tag（git 方式安装依赖它）
-
-工作区里 1.3.0 的打包改动、1.3.1 的停用修复、1.3.2 的账号池开关、1.3.3 的密钥无效文案、
-1.3.4 的模型勾选（按平台 + 点击只改一行）都还没提交，一次提交 + 一个 tag 即可同时覆盖：
-
-  git add -A && git commit -m "feat: 1.3.4 — 可直接安装 + 码道 503/签名放行 + 账号池显式开关 + 密钥无效文案 + 模型勾选按平台"
-  git tag v1.3.4 && git push origin main --tags
+## 备注：若要投递插件市场索引
+市场索引（`dsh-plugin-market-index`）里的 git 源要求 **恰好 40 位十六进制的提交号**，
+不接受 tag 名。真要投递时，把上面的 v1.3.4 换成 REST 取到的那个提交号即可。
+本仓库自带的 `market-entry.json` 是给人看的提交草稿，用的是 tag 形式。
 
 推上去之后，方式 C 的 40 位提交号用 `git rev-parse v1.3.4` 的结果填。
 
