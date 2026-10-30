@@ -12,7 +12,8 @@
   "engines": {
     "dsh": ">=0.1.7-rc.1 <0.3.0-0"
   },
-  "install": "dsh plugin --profile <你的 DSH profile> add file:<path>/dsh-huawei-connect-1.3.4.tgz",
+  "install": "dsh plugin --profile <你的 DSH profile> add github:wang111928/dsh-huawei-connect#v1.3.4",
   "installNpm": "dsh plugin --profile <你的 DSH profile> add dsh-huawei-connect@1.3.4",
-  "installGit": "dsh plugin --profile <你的 DSH profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#<40位提交>"
+  "installGit": "dsh plugin --profile <你的 DSH profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#v1.3.4",
+  "installTarball": "dsh plugin --profile <你的 DSH profile> add file:<path>/dsh-huawei-connect-1.3.4.tgz"
 }

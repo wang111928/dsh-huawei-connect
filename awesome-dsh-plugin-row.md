@@ -1,1 +1,1 @@
-| [dsh-huawei-connect](https://github.com/wang111928/dsh-huawei-connect) | 把华为「码道 CodeArts」与「果办 OfficeAce」接入 DSH：积分余量、模型勾选、请求伪装 | `dsh plugin --profile <你的 DSH profile> add dsh-huawei-connect@1.3.4` |
+| [dsh-huawei-connect](https://github.com/wang111928/dsh-huawei-connect) | 把华为「码道 CodeArts」与「果办 OfficeAce」接入 DSH：积分余量、模型勾选、请求伪装 | `dsh plugin --profile <你的 DSH profile> add github:wang111928/dsh-huawei-connect#v1.3.4` |
