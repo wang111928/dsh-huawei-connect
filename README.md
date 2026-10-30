@@ -49,8 +49,12 @@ spec 都能装。实测（全新 profile、非拷贝）：初始化 profile 后�
 
 ### 方式 B：压缩包（离线，或访问不到 GitHub 时）
 
+压缩包挂在 [Release v1.3.4](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4) 的附件里：
+[dsh-huawei-connect-1.3.4.tgz](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4/dsh-huawei-connect-1.3.4.tgz)
+（92,623 字节，sha256 `50aa9ae52361aebb05958415e00df2306b620c857fb146a71cf5dfa20e691631`）。
+
 ```sh
-# 下载 dsh-huawei-connect-1.3.4.tgz 后，把它指给宿主自己的插件安装器：
+# 下载后把它指给宿主自己的插件安装器：
 dsh plugin --profile <你的 profile> add file:/绝对路径/dsh-huawei-connect-1.3.4.tgz
 ```
 

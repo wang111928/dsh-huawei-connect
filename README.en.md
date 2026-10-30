@@ -55,7 +55,12 @@ spec in its Git/GitHub install field.
 
 ### B. Tarball (offline, or when GitHub is unreachable)
 
+The tarball is attached to [Release v1.3.4](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4):
+[dsh-huawei-connect-1.3.4.tgz](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4/dsh-huawei-connect-1.3.4.tgz)
+(92,623 bytes, sha256 `50aa9ae52361aebb05958415e00df2306b620c857fb146a71cf5dfa20e691631`).
+
 ```sh
+# once downloaded, point the host's own plugin installer at it:
 dsh plugin --profile <your profile> add file:/absolute/path/dsh-huawei-connect-1.3.4.tgz
 ```
 

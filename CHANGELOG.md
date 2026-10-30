@@ -13,7 +13,9 @@ dsh plugin --profile <你的 profile> add github:wang111928/dsh-huawei-connect#v
 
 已在全新 profile 上实测：装出 `dsh-huawei-connect 1.3.4`，并 `--dump-config` 确认插件
 组装进了 profile 树；装出来的文件与本地已测版本只差行尾（LF/CRLF），内容逐字节等价。
-压缩包那份仍然可用，作为离线方式。
+
+同时发布了 [Release v1.3.4](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4)，附件里挂着同一份压缩包
+（`dsh-huawei-connect-1.3.4.tgz`，92,623 字节，sha256 `50aa9ae52361aebb05958415e00df2306b620c857fb146a71cf5dfa20e691631`），供离线安装使用。
 
 ### 修复：模型勾选列表——点一行会把其它行的勾全抹掉
 
