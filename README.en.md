@@ -1,90 +1,44 @@
 # DSH Huawei Connect
 
-Connect Huawei's two platforms to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH):
-**CodeArts** (coding) and **OfficeAce** (office suite). One setup, two provider routes,
-with credit balances, per-model toggles, and requests shaped like the official clients.
-
-## Features
-
-- **Two platforms, two routes**: `codearts` and `officeace` each appear in DSH's model picker.
-  Use one, or both at once.
-- **Credit balances**: CodeArts reads `/snap-manager/v1/statistics/plugin` (measured 10500 on the trial plan);
-  OfficeAce reads the local control plane `/api/subscription/current` (measured 4600) and
-  `/api/codeagent-package/usage`. The two platforms meter differently, so the card shows them separately.
-- **Per-model toggles, per platform**: the two tabs keep independent lists; ticks are written to host settings and the picker updates live. A tick means "explicitly allowed"; ticking nothing on a platform leaves that platform unrestricted (the card says so). Clicking a row changes only that row.
-- **Automatic credential discovery**: CodeArts reads the existing `dsh-codearts` account file;
-  OfficeAce reads Windows Credential Manager.
-- **Request shaping**: bodies and headers mirror the official clients so upstream channel
-  fingerprinting does not reject them.
-- **Credit readout in the composer**: a compact pill in the input toolbar (and a full-width row on
-  the new-conversation page) shows the live balance for the active platform.
-- **Auto-renewal**: CodeArts security tokens refresh before expiry and the new refresh token is
-  persisted immediately; credit reads fall back to the last successful snapshot when upstream is down.
-- **Model blacklist**: models advertised upstream but actually unreachable (403/404) are dropped
-  from the picker automatically instead of being retried.
+Connect Huawei's two platforms to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH): **CodeArts** (coding) and **OfficeAce** (office suite). Both appear in DSH's model picker, each with credit balance, per-model toggles, and requests shaped like the official clients.
 
 ## Install
 
-This is a standard DSH bundle: the host reads `dsh.bundle.patch` for the server half and
-`exports["./client"]` for the settings card in the browser. Installation therefore goes
-through the host's own plugin channel — never by copying files into `node_modules` by hand.
-
-Compatibility is declared once, as `engines.dsh: ">=0.1.7-rc.1 <0.3.0-0"`. A host outside
-that range refuses the install with a named reason instead of loading and crashing later.
-The current desktop runtime (`0.2.1-rc.5`) and `dsh web 0.2.1` are both inside it.
-
-### A. Install straight from the GitHub link (recommended; verified)
-
-```sh
-# the 1.3.4 release tag
-dsh plugin --profile <your profile> add github:wang111928/dsh-huawei-connect#v1.3.4
-# to pin one exact commit, swap #v1.3.4 for the 40-char SHA:
-#   ... add github:wang111928/dsh-huawei-connect#<40-char commit>
-```
-
-`dsh plugin` forwards its remaining arguments to pnpm inside the profile directory (its own
-help text says so), so any spec pnpm accepts works. Verified on a brand-new profile: the
-profile is initialized, the source is fetched from GitHub, and it finishes in about a minute
-reporting `+ dsh-huawei-connect 1.3.4`; the profile's `package.json` then records
-`git+https://github.com/wang111928/dsh-huawei-connect.git#v1.3.4`, which upgrade, uninstall and
-backup all honour. The first fetch occasionally times out — just retry.
-
-On DSH Desktop use its own **Settings → Plugins** flow instead: that profile belongs to the
-app's plugin manager, and the CLI cannot change it while the app is running. Enter the same
-spec in its Git/GitHub install field.
-
-### B. Tarball (offline, or when GitHub is unreachable)
-
-The tarball is attached to [Release v1.3.4](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4):
-[dsh-huawei-connect-1.3.4.tgz](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4/dsh-huawei-connect-1.3.4.tgz)
-(92,623 bytes, sha256 `50aa9ae52361aebb05958415e00df2306b620c857fb146a71cf5dfa20e691631`).
-
-```sh
-# once downloaded, point the host's own plugin installer at it:
-dsh plugin --profile <your profile> add file:/absolute/path/dsh-huawei-connect-1.3.4.tgz
-```
-
-On DSH Desktop pick "install from local tarball" and point it at the same `.tgz`.
-
-### C. npm (not published yet)
+Install from npm (published as [`dsh-huawei-connect`](https://www.npmjs.com/package/dsh-huawei-connect)):
 
 ```sh
 dsh plugin --profile <your profile> add dsh-huawei-connect@1.3.4
 ```
 
-Then open **Settings → Plugins → DSH Huawei Connect**, sign in to either platform, and pick models.
+Other install methods are also supported:
+
+```sh
+# from the GitHub tag (verified)
+dsh plugin --profile <your profile> add github:wang111928/dsh-huawei-connect#v1.3.4
+# or from a local tarball
+dsh plugin --profile <your profile> add file:/absolute/path/dsh-huawei-connect-1.3.4.tgz
+```
+
+On DSH Desktop, use **Settings → Plugins** and enter the same spec in the Git/GitHub or local-tarball install field.
 
 ## Requirements
 
-- CodeArts signs its requests with `SDK-HMAC-SHA256`. If a body-rewriting proxy sits in front
-  (e.g. `billion-context` on the same machine), it must be told to forward them untouched:
-  `{"resign":{"sdk-hmac-sha256":{"passthrough":true}}}` in its config, or
-  `BILI_RESIGN_PASSTHROUGH=1`. Otherwise every turn fails, and the host UI may report it as
-  "invalid API key" — that is an error classifier reading the refused signature as an auth
-  failure, not a problem with your account (fixed on our side in 1.3.3).
-- DeepSeek Harness 0.2.1 or newer
+- DeepSeek Harness `>=0.1.7-rc.1 <0.3.0-0` (declared in the plugin's `engines.dsh`; a host outside this range refuses the install)
 - Node.js `^22.19.0 || >=24.0.0`
-- Windows for OfficeAce (it reads Windows Credential Manager); CodeArts works cross-platform
+- Windows for OfficeAce (it reads the Windows Credential Manager); CodeArts works cross-platform
+- CodeArts: sign in once via the CodeArts desktop client or `dsh-codearts`. OfficeAce: the desktop app must be running and signed in on Windows
+
+After install, open **Settings → Plugins → DSH Huawei Connect**, sign in to either platform, and pick models from the model picker.
+
+## Features
+
+- **Two platforms, two routes** — `codearts` and `officeace` each show up in the model picker; use one or both.
+- **Credit balances** — the card shows each account's remaining credits, metered per platform.
+- **Per-model toggles, per platform** — each tab keeps its own list; ticks are written to host settings and the picker updates live. A tick means "explicitly allowed"; ticking nothing leaves that platform unrestricted.
+- **Automatic credential discovery** — CodeArts reuses the existing `dsh-codearts` account; OfficeAce reads the Windows Credential Manager. Both are read-only and never require re-login.
+- **Request shaping** — bodies and headers mirror the official clients so upstream channel fingerprinting does not reject them.
+- **Auto-renewal** — CodeArts security tokens refresh before expiry; credit reads fall back to the last good snapshot when upstream is down.
+- **Model blacklist** — models advertised upstream but actually unreachable (403/404) are dropped from the picker automatically.
 
 ## License
 
