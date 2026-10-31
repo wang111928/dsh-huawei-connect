@@ -60,7 +60,7 @@ dsh plugin --profile <你的 profile> add file:/绝对路径/dsh-huawei-connect-
 
 桌面端选「从本地压缩包安装」并指向同一个 `.tgz`。
 
-### 方式 C：npm（尚未发布）
+### 方式 C：npm（已发布）
 
 ```sh
 dsh plugin --profile <你的 profile> add dsh-huawei-connect@1.3.4
