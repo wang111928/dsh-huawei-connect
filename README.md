@@ -274,6 +274,11 @@ DSH 把图片按 OpenAI 的 `image_url` + base64 data URL 发出来，插件原�
 
 - 种子清单原先按名字猜"GLM/盘古都是多模态"，结果全猜反（这几个恰恰不吃图），而
   `kimi-k3` 明明能吃图却被标成 false。现在种子清单的每一项都直接引用实测表，不再手写。
+- **图片要靠宿主的附件服务**：会话里的图片是引用（字节在 durable attachment library），
+  适配器必须把 `resolveAttachments` / `resolveImageAccess` 接到宿主的
+  `ctx.get('attachments')` 与 `ctx.get('fs')` 上，否则 `PiAiAdapter` 会在请求发出前抛
+  `pi-ai image input requires the durable attachment service`（1.3.5 之前就是这样）。
+  附件服务不可用时，插件把所有模型声明成纯文本，让 UI 先拦住贴图。
 - **会话自愈**：万一某个模型的目录标记仍然不对，上游当场拒图后，插件会把该模型降级成
   纯文本（内存 + `~/.dsh/.huawei-connect/image-refused-models.json` 落盘），**下一轮**
   发送前就把图换成占位。否则那张图会一直躺在会话历史里，每次重试都是同一个错误——

@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.3.6
+
+### 修复：贴图必炸「pi-ai image input requires the durable attachment service」
+
+1.3.5 把「模型能吃图」声明对了，但**图片走不到 shim**：宿主那一层先拒了。
+
+`dsh-llm-pi-ai` 的 `PiAiAdapter` 在把会话历史翻译成 pi-ai 请求时，需要宿主的两项服务：
+
+```js
+if (containsImage && attachments === void 0)
+  throw new LlmError('pi-ai image input requires the durable attachment service', 'UNSUPPORTED_CONTENT')
+```
+
+`attachments` 来自 `config.resolveAttachments?.()`。本插件的适配器只传了 `profiles` /
+`auth` / `resolveApiKey`，于是 `resolveAttachments` 是 `undefined` → 只要消息里有一张图，
+适配器在**请求发出之前**就抛错。这个错误比「不支持图片」更糟：它够不着 shim 的剥离与
+自愈逻辑（那些都在更下游），用户看到的是一句纯英文内部错误。
+
+修复（`adapter.mjs`）：
+
+- 新传 `resolveAttachments: () => ctx.get('attachments')`——会话里的图片是**引用**，
+  字节在附件库里，pi-ai 要靠它把引用换成归一化后的请求图（尺寸/质量阶梯由宿主做）。
+- 新传 `resolveImageAccess`，把附件的宿主路径经 `ctx.get('fs').processPathFromHostPath`
+  映射进工具执行世界（模型/工具才真读得到那张图），用的是 `@deepseek-ai/dsh-llm`
+  导出的 `resolveImageAttachmentAccess`，与宿主自己的 llm-pi-ai 装配完全同款。
+- **附件服务缺席时降级而不是假装支持**：`getModels()` 每次现查 `attachments` 是否可用，
+  不可用就把所有模型声明成纯文本（`input: ['text']`）。这样 UI 层就拦住贴图，而不是
+  让用户贴完再吃一个内部错误。
+- 补齐图片预算：`maxRequestImages: 20`、`imageOffloadCountQuantum: 10`（此前只给了
+  `maxRequestImageBytes` / 像素预算 / 单图字节，张数与 offload 粒度走的是宿主默认）。
+
+### 验证
+
+`adapter` 在宿主上下文里真加载（`@earendil-works/pi-ai`、`@deepseek-ai/dsh-llm-pi-ai`
+用宿主自己的 node_modules 解析）：
+
+```
+with attachment service: kimi-k3=["text","image"], GLM-5.2=["text"]
+without:                 kimi-k3=["text"],          GLM-5.2=["text"]
+adapter config has resolveAttachments: true
+adapter config has resolveImageAccess: true
+```
+
 ## 1.3.5
 
 ### 图片输入：真机实测，把"能吃图"的判定改对
