@@ -8,12 +8,12 @@
     "zh": "把华为「码道 CodeArts」与「果办 OfficeAce」接入 DeepSeek Harness：一处登录、积分与模型勾选、请求伪装、图片输入，以及码道活动福利一键领取。"
   },
   "npm": "dsh-huawei-connect",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "engines": {
     "dsh": ">=0.1.7-rc.1 <0.3.0-0"
   },
-  "install": "dsh plugin --profile <你的 DSH profile> add github:wang111928/dsh-huawei-connect#v1.4.0",
-  "installNpm": "dsh plugin --profile <你的 DSH profile> add dsh-huawei-connect@1.4.0",
-  "installGit": "dsh plugin --profile <你的 DSH profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#v1.4.0",
-  "installTarball": "dsh plugin --profile <你的 DSH profile> add file:<path>/dsh-huawei-connect-1.4.0.tgz"
+  "install": "dsh plugin --profile <你的 DSH profile> add github:wang111928/dsh-huawei-connect#v1.4.1",
+  "installNpm": "dsh plugin --profile <你的 DSH profile> add dsh-huawei-connect@1.4.1",
+  "installGit": "dsh plugin --profile <你的 DSH profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#v1.4.1",
+  "installTarball": "dsh plugin --profile <你的 DSH profile> add file:<path>/dsh-huawei-connect-1.4.1.tgz"
 }
