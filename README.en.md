@@ -12,6 +12,11 @@ with credit balances, per-model toggles, and requests shaped like the official c
   OfficeAce reads the local control plane `/api/subscription/current` (measured 4600) and
   `/api/codeagent-package/usage`. The two platforms meter differently, so the card shows them separately.
 - **Per-model toggles, per platform**: the two tabs keep independent lists; ticks are written to host settings and the picker updates live. A tick means "explicitly allowed"; ticking nothing on a platform leaves that platform unrestricted (the card says so). Clicking a row changes only that row.
+- **Show/hide a platform**: each platform has its own "Hide models / Show models" button. It controls
+  whether that platform's models appear in the host picker at all — orthogonal to the ticks (which pick
+  *which* models). OfficeAce carries dozens of internal/experimental ids, so hiding the whole batch is
+  often what you want. Accounts, catalog and ticks are untouched. Stored as `showModels` in settings,
+  both on by default.
 - **Automatic credential discovery**: CodeArts reads the existing `dsh-codearts` account file;
   OfficeAce reads Windows Credential Manager.
 - **Request shaping**: bodies and headers mirror the official clients so upstream channel

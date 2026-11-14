@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.3.7
+
+### 新增：平台的「显示模型」开关（果办特别需要）
+
+果办有几打模型、大半是内部/实验型号，混在宿主的模型选择器里很难挑；而"勾选"解决不了
+"我把这一整个平台先收起来"这种需求——勾选只能表达"开放哪些模型"，空清单一律等于"全部开放"。
+
+所以加的是**可见性**开关，与勾选正交：
+
+- 卡片里每个平台多一行按钮：「隐藏模型」/「显示模型」，旁边一个状态点。
+- 关掉 = 该平台**一个模型都不注册**给宿主，模型选择器里整批消失；账号、目录、勾选原样保留。
+- 持久化在 settings 的 `showModels`（`{ codearts: boolean, officeace: boolean }`），默认两边都开，
+  等于不改变原有行为。
+- 坏值一律按"显示"处理：一次手滑的 settings 不该把整个平台的模型藏没。
+
+实现上只是 adapter 的 `visible()`：`buildModels()` 在它返回 `false` 时直接给空数组。因为
+`provider.getModels` 每次现算，用户点完开关不必重启 DSH。
+
+### 验证
+
+- `normalizeShowModels` / `showModelsOf` / `withPlatformVisibility`：缺省、`false`、坏值、`null`、
+  单平台替换逐条断言通过。
+- adapter 用桩模块（pi-ai / dsh-llm-* 全替身）跑出真实分支：
+
+```
+default:                        deepseek-v4.1-flash,GLM-5.2
+visible=false:                  0
+visible=true:                   2
+attachment stub (no imageHostPath): 两个模型都降级 ["text"]
+enabled filter:                 GLM-5.2
+```
+
 ## 1.3.6
 
 ### 修复：贴图必炸「pi-ai image input requires the durable attachment service」
