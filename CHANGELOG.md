@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.4.0
+
+### 新增：码道「活动福利」查询与一键领取
+
+卡片里码道这一栏多一块「活动福利」：列出当前能领的活动与金额，一个按钮领完。
+
+这条链路和模型调用**不是一套鉴权**，值得写清楚：
+
+| | 模型 | 活动福利 |
+|---|---|---|
+| 域名 | `snap-access.cn-north-4.myhuaweicloud.com` | `devcloud.cn-north-4.huaweicloud.com` |
+| 鉴权 | IAM `SDK-HMAC-SHA256` + `x-auth-token` | 浏览器会话 cookie（`SessionID` / `devclouddevuibjJ_SESSION_ID`）+ `cftk` 头 |
+
+所以 IAM token 在这里没有用。实现是「粘贴一次 Cookie 请求头，之后一键领取」：
+
+1. `GET  /chat/PromptCenterService/v1/ops/delivery?channel=WEB` — 活动列表，`claimable` 由服务端算好
+2. `POST /chat/PromptCenterService/v1/ops/events/trigger` — 先打一发 `user.login`（「登录即得」类活动靠它变 ELIGIBLE）
+3. `POST /chat/PromptCenterService/v1/ops/claim` — 领取（`campaignId` + `idempotentKey` + `channel: WEB`）
+4. `POST /chat/PromptCenterService/v1/ops/confirm` — 确认到账（前端领完紧跟这一步；只 claim 不 confirm 会停在 CLAIMED）
+
+实测（2026-11-14，账号 `zxc147396`）：活动 #34「每日签到领200积分」`claimable: true` →
+claim 返回 `status: CLAIMED, totalAmount: 200` → confirm 后列表变 `CONFIRMED`，可领数归零。
+`confirm` 失败不让整体算失败（领取本身已经成功），只记 warn。
+
+其它细节：
+
+- `normalizeCookie` 接住三种粘法：整条 `Cookie:` 头、只有值、多行；`cookieLooksSignedIn` 先判有没有
+  `SessionID`，缺了直接给「复制少了」的人话，不发请求。
+- 没配会话时**不发任何请求**，卡片显示「未配置会话」。
+- 列表带 60 秒缓存：卡片 60 秒刷一次，别把上游当轮询机；失败不缓存，改完 cookie 立刻生效。
+- 领取是逐单的，一单失败不影响后面的——福利互相独立。
+- 会话存 `~/.dsh/.huawei-connect/promo-session.json`（0600）。过期就重新粘一次。
+
+### 顺带
+
+`call()` 现在把宿主返回的 `{ error }` 透出来（此前一律显示 "HTTP 400"）。
+
 ## 1.3.7
 
 ### 新增：平台的「显示模型」开关（果办特别需要）

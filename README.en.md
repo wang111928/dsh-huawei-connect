@@ -27,6 +27,11 @@ with credit balances, per-model toggles, and requests shaped like the official c
   persisted immediately; credit reads fall back to the last successful snapshot when upstream is down.
 - **Model blacklist**: models advertised upstream but actually unreachable (403/404) are dropped
   from the picker automatically instead of being retried.
+- **One-click activity claims** (CodeArts): the card lists claimable campaigns (daily check-in,
+  limited-time events) with their credit amounts and a single button to claim all. This uses
+  DevCloud's **web** ops API (`/chat/PromptCenterService/v1/ops/*`), which authenticates with the
+  **browser session cookie** — not the model IAM token. The card saves one pasted Cookie header and
+  verifies it immediately; re-paste when the session expires.
 
 ## Install
 

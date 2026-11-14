@@ -21,6 +21,10 @@
 - **请求伪装**：按官方客户端的请求形态构造（身份头、字段白名单、认证方式），
   详见 [§4](#4-请求伪装实测依据)。
 - **不影响另一个平台**：一个平台挂了，另一个照常；卡片上的错误就地显示。
+- **活动福利一键领取**（码道）：卡片里列出当前可领的活动与积分（每日签到、限时活动等），
+  一个按钮全领。走的是 DevCloud **网页端**的运营接口（`/chat/PromptCenterService/v1/ops/*`），
+  认的是**浏览器会话 cookie** 而不是模型的 IAM token——实现方式是在卡片里粘一次 Cookie 请求头
+  （保存时立刻验证），此后随时一键领取，会话过期了再粘一次。详见 [§4.8](#48-活动福利领取)。
 
 ## 安装
 
@@ -288,6 +292,25 @@ DSH 把图片按 OpenAI 的 `image_url` + base64 data URL 发出来，插件原�
   换模型、重登、重开对话都救不回来。
 
 想让某个模型"重新试一次看图"：删掉 `image-refused-models.json` 里对应平台的 id（或删整个文件），重启 DSH 即可。
+
+### 4.8 活动福利领取
+
+流程对照网页端实录（2026-11-14，账号 `zxc147396`）：
+
+1. `GET  /chat/PromptCenterService/v1/ops/delivery?channel=WEB` — 活动列表；`claimable` 由服务端算好
+2. `POST /chat/PromptCenterService/v1/ops/events/trigger` — 先打一发 `user.login`
+   （「登录即得」类活动靠它从 pending 变 ELIGIBLE）
+3. `POST /chat/PromptCenterService/v1/ops/claim` — 领取（`campaignId` + `idempotentKey` + `channel: WEB`）
+4. `POST /chat/PromptCenterService/v1/ops/confirm` — 确认到账（前端领完紧跟这一步，
+   只 claim 不 confirm 记录会停在 CLAIMED）
+
+实测：活动 #34「每日签到领200积分」claimable=true → claim 返回 `CLAIMED / total 200` →
+confirm 后列表变 `CONFIRMED`，可领数归零。
+
+鉴权说明：这条链路认 **cookie**（`SessionID` / `devclouddevuibjJ_SESSION_ID` 负责登录态，
+`devclouddevuibjtcftk` 同时作为 `cftk` 头单独发），**IAM token 在这里没有用**。插件不猜、
+不改、不验证密码——只把你粘的 cookie 原样带上去。cookie 过期会直接提示「重新粘贴」。
+会话存在 `~/.dsh/.huawei-connect/promo-session.json`（仅当前用户可读）。
 
 ## 5. 上下文处理
 
