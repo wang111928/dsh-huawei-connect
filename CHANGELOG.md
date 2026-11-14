@@ -1,28 +1,458 @@
 # Changelog
 
+## 1.4.2
+
+### 调整：活动福利「自动领取」默认开启
+
+1.4.1 把自动领取做成显式开关（默认关）。这版把默认值翻过来：
+
+- 只要设置里没显式存过 `false`，`promoAutoClaim` 就按开处理；存过 `false` 则尊重关闭选择。
+- 理由：cookie 粘一次之后领取全自动是本插件的主打能力，不该让用户为了开它多点一下；
+  而每小时复查的代价本来就只有一次 `ops/delivery` GET，空跑无害。
+- 已配置过 cookie 的用户重启后**无需任何操作**，自动领取直接生效。
+
+## 1.4.1
+
+### 新增：活动福利「自动领取」
+
+上一版领一次点一次。这版把「领取」这件事做成完全自动：
+
+- 设置 `promoAutoClaim`（默认**关**，卡片里显式开启——后台自动发请求的功能要用户点头）。
+- 开启后：DSH 装配完成时立即自动检查领取一次，之后**每小时**复查一次；有可领才动手。
+- `claimAll` 加了短路：列表里已有可领项就直接领，没有才打 `user.login` 开闸再复查，
+  平时每小时一次的代价只是一次 `ops/delivery` GET。
+- 每次自动运行的结果（领了 / 无可领 / 失败原因）进状态快照，卡片显示「上次自动：…」。
+- 打开开关时立刻自动跑一次，马上能看到效果，不用等整点。
+
+自动化的边界还是产品定的：**cookie 只能由浏览器产生**（活动接口认浏览器会话，实测 IAM
+token / `x-auth-token` 都会被重定向到登录页），所以「粘一次 cookie」这一步没法省；
+之后领取、复查、幂等都自动了。cookie 过期时卡片直说「重新粘贴」。
+
+## 1.4.0
+
+### 新增：码道「活动福利」查询与一键领取
+
+卡片里码道这一栏多一块「活动福利」：列出当前能领的活动与金额，一个按钮领完。
+
+这条链路和模型调用**不是一套鉴权**，值得写清楚：
+
+| | 模型 | 活动福利 |
+|---|---|---|
+| 域名 | `snap-access.cn-north-4.myhuaweicloud.com` | `devcloud.cn-north-4.huaweicloud.com` |
+| 鉴权 | IAM `SDK-HMAC-SHA256` + `x-auth-token` | 浏览器会话 cookie（`SessionID` / `devclouddevuibjJ_SESSION_ID`）+ `cftk` 头 |
+
+所以 IAM token 在这里没有用。实现是「粘贴一次 Cookie 请求头，之后一键领取」：
+
+1. `GET  /chat/PromptCenterService/v1/ops/delivery?channel=WEB` — 活动列表，`claimable` 由服务端算好
+2. `POST /chat/PromptCenterService/v1/ops/events/trigger` — 先打一发 `user.login`（「登录即得」类活动靠它变 ELIGIBLE）
+3. `POST /chat/PromptCenterService/v1/ops/claim` — 领取（`campaignId` + `idempotentKey` + `channel: WEB`）
+4. `POST /chat/PromptCenterService/v1/ops/confirm` — 确认到账（前端领完紧跟这一步；只 claim 不 confirm 会停在 CLAIMED）
+
+实测（2026-11-14，账号 `zxc147396`）：活动 #34「每日签到领200积分」`claimable: true` →
+claim 返回 `status: CLAIMED, totalAmount: 200` → confirm 后列表变 `CONFIRMED`，可领数归零。
+`confirm` 失败不让整体算失败（领取本身已经成功），只记 warn。
+
+其它细节：
+
+- `normalizeCookie` 接住三种粘法：整条 `Cookie:` 头、只有值、多行；`cookieLooksSignedIn` 先判有没有
+  `SessionID`，缺了直接给「复制少了」的人话，不发请求。
+- 没配会话时**不发任何请求**，卡片显示「未配置会话」。
+- 列表带 60 秒缓存：卡片 60 秒刷一次，别把上游当轮询机；失败不缓存，改完 cookie 立刻生效。
+- 领取是逐单的，一单失败不影响后面的——福利互相独立。
+- 会话存 `~/.dsh/.huawei-connect/promo-session.json`（0600）。过期就重新粘一次。
+
+### 顺带
+
+`call()` 现在把宿主返回的 `{ error }` 透出来（此前一律显示 "HTTP 400"）。
+
+## 1.3.7
+
+### 新增：平台的「显示模型」开关（果办特别需要）
+
+果办有几打模型、大半是内部/实验型号，混在宿主的模型选择器里很难挑；而"勾选"解决不了
+"我把这一整个平台先收起来"这种需求——勾选只能表达"开放哪些模型"，空清单一律等于"全部开放"。
+
+所以加的是**可见性**开关，与勾选正交：
+
+- 卡片里每个平台多一行按钮：「隐藏模型」/「显示模型」，旁边一个状态点。
+- 关掉 = 该平台**一个模型都不注册**给宿主，模型选择器里整批消失；账号、目录、勾选原样保留。
+- 持久化在 settings 的 `showModels`（`{ codearts: boolean, officeace: boolean }`），默认两边都开，
+  等于不改变原有行为。
+- 坏值一律按"显示"处理：一次手滑的 settings 不该把整个平台的模型藏没。
+
+实现上只是 adapter 的 `visible()`：`buildModels()` 在它返回 `false` 时直接给空数组。因为
+`provider.getModels` 每次现算，用户点完开关不必重启 DSH。
+
+### 验证
+
+- `normalizeShowModels` / `showModelsOf` / `withPlatformVisibility`：缺省、`false`、坏值、`null`、
+  单平台替换逐条断言通过。
+- adapter 用桩模块（pi-ai / dsh-llm-* 全替身）跑出真实分支：
+
+```
+default:                        deepseek-v4.1-flash,GLM-5.2
+visible=false:                  0
+visible=true:                   2
+attachment stub (no imageHostPath): 两个模型都降级 ["text"]
+enabled filter:                 GLM-5.2
+```
+
+## 1.3.6
+
+### 修复：贴图必炸「pi-ai image input requires the durable attachment service」
+
+1.3.5 把「模型能吃图」声明对了，但**图片走不到 shim**：宿主那一层先拒了。
+
+`dsh-llm-pi-ai` 的 `PiAiAdapter` 在把会话历史翻译成 pi-ai 请求时，需要宿主的两项服务：
+
+```js
+if (containsImage && attachments === void 0)
+  throw new LlmError('pi-ai image input requires the durable attachment service', 'UNSUPPORTED_CONTENT')
+```
+
+`attachments` 来自 `config.resolveAttachments?.()`。本插件的适配器只传了 `profiles` /
+`auth` / `resolveApiKey`，于是 `resolveAttachments` 是 `undefined` → 只要消息里有一张图，
+适配器在**请求发出之前**就抛错。这个错误比「不支持图片」更糟：它够不着 shim 的剥离与
+自愈逻辑（那些都在更下游），用户看到的是一句纯英文内部错误。
+
+修复（`adapter.mjs`）：
+
+- 新传 `resolveAttachments: () => ctx.get('attachments')`——会话里的图片是**引用**，
+  字节在附件库里，pi-ai 要靠它把引用换成归一化后的请求图（尺寸/质量阶梯由宿主做）。
+- 新传 `resolveImageAccess`，把附件的宿主路径经 `ctx.get('fs').processPathFromHostPath`
+  映射进工具执行世界（模型/工具才真读得到那张图），用的是 `@deepseek-ai/dsh-llm`
+  导出的 `resolveImageAttachmentAccess`，与宿主自己的 llm-pi-ai 装配完全同款。
+- **附件服务缺席时降级而不是假装支持**：`getModels()` 每次现查 `attachments` 是否可用，
+  不可用就把所有模型声明成纯文本（`input: ['text']`）。这样 UI 层就拦住贴图，而不是
+  让用户贴完再吃一个内部错误。
+- 补齐图片预算：`maxRequestImages: 20`、`imageOffloadCountQuantum: 10`（此前只给了
+  `maxRequestImageBytes` / 像素预算 / 单图字节，张数与 offload 粒度走的是宿主默认）。
+
+### 验证
+
+`adapter` 在宿主上下文里真加载（`@earendil-works/pi-ai`、`@deepseek-ai/dsh-llm-pi-ai`
+用宿主自己的 node_modules 解析）：
+
+```
+with attachment service: kimi-k3=["text","image"], GLM-5.2=["text"]
+without:                 kimi-k3=["text"],          GLM-5.2=["text"]
+adapter config has resolveAttachments: true
+adapter config has resolveImageAccess: true
+```
+
+## 1.3.5
+
+### 图片输入：真机实测，把"能吃图"的判定改对
+
+用户报的是「插件支持一下图片输入」。查下来链路本身是通的——DSH 按 OpenAI
+`image_url` + base64 发图，插件原样转发，`codearts/deepseek-v4.1-flash` **真能看见图**
+（2026-11-12 实测：256×256 的方块图，问「有哪些颜色」，答「红色、蓝色」）。真正坏的是
+**能力判定**：种子清单按模型名猜多模态，正好把两边都猜反。
+
+实测（同账号，逐条复现）：
+
+| 模型 | 结果 |
+|---|---|
+| `deepseek-v4.1-flash` / `-1017`、`kimi-k3`、`kimi-k3.1-pro` | 收图并正确描述 |
+| `glm-5.3-flash` | 收图，但内容会被它自己的安全策略判 `81011`（审核，不是格式） |
+| `GLM-5.2`、`glm-5.3`、`openpangu-2.0-pro`、`openpangu-2.0-flash` | `InferHub.001001020.406 The request model is not multimodal` |
+| 果办全部模型 | 网关层直接 `ModelArts.81001 unsupported content type: 'image_url'` |
+
+改动：
+
+- **新增 `CODEARTS_IMAGE_VERDICT` 实测表**，能力判定顺序改为「实测表 → 上游
+  `supports_images`（仅新模型）→ id/描述推断」。种子清单的每一项直接引用这张表，
+  不再手写布尔值：`kimi-k3` 从 false 改 true（白丢的视觉模型），`GLM-5.2` /
+  `openpangu-2.0-*` 从 true 改 false（贴图必废一轮）。
+- **果办整体关闭图片**（`OFFICEACE_ACCEPTS_IMAGES = false`）：网关不认 `image_url`，
+  按模型名猜多模态只会换来 81001。发图请求自动剥离成文字占位，会话不中断。
+- **会话自愈**：新增 `isImageUnsupportedError()` 与 `onImageUnsupported` 回调。上游
+  当场拒图（流内 `001001020` / 带 `unsupported content type` 的 `81001`）后，插件把该
+  模型降级成纯文本：内存目录 `markTextOnly()` + 落盘 `image-refused-models.json`，
+  **下一轮**发送前剥离图片。此前那张图会一直躺在历史里，之后每一轮都被同一个错误顶回来，
+  换模型、重登、重开对话都救不了。
+- **剥离函数不再就地改入参**（`stripImagesForTextModel` 改为重建 messages）。原实现会
+  改写调用方传进来的 body，多账号重试时第二轮拿到的已经是剥离后的版本；虽然当时无害，
+  但只要以后加入"看图模型重试"就是坑。占位文案同时改成人话：
+  「[图片已省略：当前模型不支持图片输入。需要看图请切换到支持图片的模型。]」。
+- **会话并发上限 3 → 5**：2026-11-12 复测的错误文案已变成
+  `TM.00001041 并发会话数已达上限(5个)`（上限随账号套餐变）。闸门按 5 计；撞上更低
+  配额时由 `concurrency` 分支等 60 秒原地重试，不会把 400 交给用户。
+
+### 验证
+
+- `node hwprobe/test.mjs` 全绿：实测表覆盖上游宣传值（两个方向）、种子清单与实测表
+  一致、果办全 false、剥离不改入参、拒图正则不误判普通 `81001` / `001001005`、闸门 = 5。
+- 真机探针：`hwprobe/probe2.mjs`（`deepseek-v4.1-flash` / `kimi-k3` 正常出内容）、
+  `probe3.mjs`（`GLM-5.2` / `openpangu-2.0-pro` / `glm-5.2-sft-harmony` 复现 001001020）。
+
 ## 1.3.4
 
-- **Published to npm** as [`dsh-huawei-connect`](https://www.npmjs.com/package/dsh-huawei-connect). Install with `dsh plugin --profile <profile> add dsh-huawei-connect@1.3.4`.
-- GitHub-tag and local-tarball installs remain supported.
-- **Fixed**: per-model toggles — clicking one row no longer clears the ticks on other rows; ticks now mean "explicitly allowed", and an empty list on a platform means "unrestricted".
-- **Fixed**: model selection split into one independent list per platform (`enabledModels: { codearts: [...], officeace: [...] }`); old flat arrays migrate automatically.
+### 发布：可以直接用 GitHub 链接安装
+
+仓库已发布到 https://github.com/wang111928/dsh-huawei-connect，打完 tag `v1.3.4` 之后
+一行命令即可安装（`dsh plugin` 的参数是原样转交给 profile 里的 pnpm 的）：
+
+```sh
+dsh plugin --profile <你的 profile> add github:wang111928/dsh-huawei-connect#v1.3.4
+```
+
+已在全新 profile 上实测：装出 `dsh-huawei-connect 1.3.4`，并 `--dump-config` 确认插件
+组装进了 profile 树；装出来的文件与本地已测版本只差行尾（LF/CRLF），内容逐字节等价。
+
+同时发布了 [Release v1.3.4](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4)，附件里挂着同一份压缩包
+（`dsh-huawei-connect-1.3.4.tgz`，92,623 字节，sha256 `50aa9ae52361aebb05958415e00df2306b620c857fb146a71cf5dfa20e691631`），供离线安装使用。
+
+### 修复：模型勾选列表——点一行会把其它行的勾全抹掉
+
+用户实测复现（原话：「我选的时最上面的模型，但你其他所有模型前面的对号被取消」）：
+
+1. 勾选清单为空时，宿主与适配器把「空」理解成**不限制（全部开放）**，这是设计；
+   但卡片把空清单渲染成了「每一行都打着勾」。
+2. 点击某一行的处理只是普通的 toggle，于是点第一行（它显示着 ✓）其实是在**创建**
+   一份「只包含这一行」的清单——其它行的 ✓ 随之消失。
+3. 结果既不像列表、也不像选择：看到的是「只剩一个」，实际生效的也是「只剩一个」。
+
+修复：
+
+- 勾只代表**明确勾上**的模型。空清单在该栏显示状态行「不限制：该平台的全部模型都开放」，
+  不再假装全部勾选。点一行只改这一行。
+- 按钮语义写清楚：`全选` → `全部勾选`，`全不选` → `不限（全部开放）`。
+
+### 修复：勾选清单从「一份全局」改成「按平台一份」
+
+这是同一个 bug 的另一半，也是分栏卡片的必然结果：两个平台的模型 id 互不重叠，
+一份全局清单等于**同时过滤两个平台**——在码道栏只留几个模型，果办的 13 个模型会被
+一起从模型选择器里藏掉，而果办那一栏显示成「一个都没勾」。现在：
+
+- settings 里的 `enabledModels` 是 `{ codearts: [...], officeace: [...] }`；
+  某一栏为空 = 该栏不限制。
+- 旧的扁平数组按「这个 id 属于哪个平台的目录」自动迁移；两个目录里都找不到的 id 落到
+  码道，不丢用户的既有选择（迁移逻辑见 `lib/enabled.mjs`）。
+- 保存一次写整份记录：切到另一栏再按保存不会丢掉上一栏的改动。
+
+### 验证
+
+- `node _hwc_models_smoke.mjs` 14/14：真加载客户端模块、真点行、真读点击之后的 className
+  与勾，覆盖「点最上面一行后其余 9 行保持勾着」「果办的草稿不因码道的点击而改变」
+  「保存写回整份记录」。用户上报的那一幕被钉进断言：`全部勾选` → 点第一行 → 其余仍在勾选态。
+- `node _hwtest_enabled.mjs` 21/21：形状识别、旧数组迁移、未知 id 兜底、清洗、幂等。
 
 ## 1.3.3
 
-- **Fixed**: CodeArts "API key invalid" error when a local request-rewriting proxy (e.g. `billion-context`) sits in front — the plugin no longer lets that misreport as an auth failure. Pass through the `SDK-HMAC-SHA256` signature with `BILI_RESIGN_PASSTHROUGH=1` or the equivalent config.
-- `TM.00001001` (missing `Agent-Type`) reclassified from rate-limit to request-shape error.
+### 修复：码道「本轮运行失败 API 密钥无效」——错在中间转发层，而错因被宿主改写成了密钥
+
+实测链条（每一步都在本机复现过）：
+
+1. 码道请求是 `SDK-HMAC-SHA256` 签名的。
+2. 本机装的 `billion-context`（bili）在宿主进程里 patch 了 `fetch`，遇到签名请求就**拒收**：
+   `403` + `{"type":"signed_request_requires_resign","code":"bili_resign_unavailable", ...}`。
+   它默认的策略是「找凭据重签」而不是「原样转发」，而这条链路上没有可用的签名凭据。
+3. shim 按设计把上游响应原文嵌进了报错文本。
+4. 宿主的错误分类 `classifyPiAiError` 第一条规则就是「报文里出现独立 401/403 → `AUTH`」，
+   这条转发层的回绝因此被判定为凭证问题。
+5. 聊天界面把 `AUTH` 渲染成 `message.failure.auth` = **「API 密钥无效」**。
+
+所以用户看到的「密钥无效」既不是密钥问题，也不是本插件单独能修掉的问题。
+
+### 修复内容
+
+- **真正让码道通起来的一步在 bili 侧**：给内置签名方案开「原样放行」。实测该方案的内置 id 是
+  `sdk-hmac-sha256`（不是 `hmac-sha256`），配置写在
+  `%USERPROFILE%\.config\billion-context\billion-context.json`：
+  `{"resign":{"sdk-hmac-sha256":{"passthrough":true}}}`（等价于环境变量
+  `BILI_RESIGN_PASSTHROUGH=1`）。改完**立刻生效**，不需要重启 DSH——bili 每次请求都重读配置。
+  放行后它的日志会打出 `sdk-hmac-sha256-signed model request forwarded DIRECT`。
+- **插件侧不再被误判成密钥失效**：新增 `hostSafeText()`，`describeFailure` 对非认证类失败
+  把文案里独立的 `401`/`403` 抹成 `4xx`（认证类保留原样——那时用户确实该看到「密钥无效」）；
+  shim 的内部错误路径同样处理。两条回环闸门（Host / Origin 不匹配）的状态码由 403 改为 400，
+  免得把本地的防护拒绝伪装成上游鉴权失败。
+- **`TM.00001001` 从「限流」改判「请求形状错误」**：实测它是「请求头 Agent-Type 为空」
+  「参数 model 不合法」这一类，按限流处理会白做三件事（15 秒冷却 + 退避重试 + 换账号）。
+- 回归断言 `node _hwtest_hostsafe.mjs`：15/15 通过。
+
+### 验证证据
+
+- bili 日志：`sdk-hmac-sha256-signed model request forwarded DIRECT (built-in passthrough opt-in (#1884) — byte-untouched, no compression)`。
+- 在宿主进程内实跑一张 `codearts/deepseek-v4.1-flash-1017` 的任务卡片：结果 `succeeded`。
+- 插件状态：码道 `successes` 由 0 变 1、`failures` 不再增长、`lastError` 清空。
 
 ## 1.3.2
 
-- Account pool is now an explicit toggle, default off = single-account mode (no rotation).
-- Reuse the existing `dsh-codearts` account file; OfficeAce reads the Windows Credential Manager. Both read-only.
+### 账号池变成显式开关：默认就是单账号
+
+- 新增按平台的 **账号池开关**，默认关闭 = **单账号模式（日常）**：只用一个账号，不做轮转。
+- 单账号模式的挑选逻辑 `pickSingle`：健康度只用来「挑」，**不用来「删」**。账号被停用或在冷却时仍然会被选中，所以不会再出现“候选为空 → 503 unconfigured”这一类连锁故障。
+- 账号池启用时才走原来的 `pools.rank()`：按健康度轮转并剔除不健康账号——那是它该有的行为，现在要用户显式打开。配两个以上账号才值得开。
+- 新增 `GET/POST /api/huawei-connect/pool`（持久化到设置命名空间 `huawei-connect` 的 `poolEnabled`）；状态快照新增 `poolEnabled` 与 `activeAccount`，卡片因此能说出“当前使用的是哪个号”。
+- 码道与果办**同一份逻辑、同一份 UI**，两个平台一起生效。
+
+### 设置卡片
+
+- 账号池从默认路径里摘出来，单独一个按钮 + 一个状态标签：`单账号模式（日常）` / `账号池已启用`，下面一句说明为什么默认关闭。
+- **模型清单与账号列表都改成逐行列表**：此前两者共用一套 flex-wrap 的 chip 流，样式还完全一样，挤成一团又分不清边界。现在每行 = 标记位（勾选 ✓ / 当前账号 ●）+ 名称 + 右侧状态或模型 id，清单限高 320px 可滚动。
+- 上游没给显示名（`name === id`）时，右侧不再重复同一串 id。
 
 ## 1.3.1
 
-- Built-in browser login for both platforms (PKCE + DPoP, local loopback callback); no longer depends on the upstream client already being signed in.
-- Auto-renew tokens (refresh before expiry; persist new refresh token immediately).
+### 修复：码道反复 503「还没有可用的账号」——一次转发层拒绝换来的账号级停用
+
+实测到的完整链条（每一项都有运行期证据）：
+
+1. 码道的请求是 **SDK-HMAC-SHA256 签名**的。中间转发层拒收这种请求，回
+   `{"type":"signed_request_requires_resign","code":"bili_resign_unavailable"}`。
+2. 这条报文没有匹配上任何已知文案，落进了 `classifyUpstreamFailure` 末尾
+   `if (status === 401 || status === 403) return { kind: 'authentication' }` 的兜底。
+3. `authentication` 在池里的处置是 **`disable()`：停用整整 1 小时**。
+4. `AccountPool.rank()` 把停用账号从候选里剔除，于是 `accounts('codearts')` 返回空，
+   shim 在发起任何上游请求之前就回了 503 `unconfigured`。
+5. 而「同步登录态」从来不会调用 `pool.enable()`——于是错误文案让用户去做的那个动作，
+   恰恰是修不好它的那个动作。停用状态又只存在内存里，所以除了等满一小时或重启 DSH，
+   没有任何出路。这就是"刚登录就又不行"的来源。
+
+### 修复内容
+
+- **新增 `proxy_refused` 分类**：转发层明确表示"不转这种签名请求"时，不再往 401/403
+  兜底里掉。该分类不计错误、不冷却、不停用、不换号，并把上游原始报文原样报出来，
+  文案直说"账号和凭证本身没有问题，重登也不会改变结果"。
+- **只有 401 才算凭证失效**。裸 403 改为可恢复的限流冷却（15 秒 + 允许换号再试一次）：
+  华为此类网关的 403 绝大多数是策略 / 签名 / 参数层面的拒绝，误判成认证失败会停用一个
+  完全健康的账号，而停用后池没有任何自愈路径。
+- **`model_unavailable` 改为按报文判定**（`ModelArts.81004 / 81009 / 81010`、`Invalid model`、
+  `No available backend`），403 和 404 都认。此前 403 上的 81009 会被当成限流反复冷却，
+  404 上的会被吞成 `not_found`。
+- **「同步登录态」现在会解除池里的停用与冷却**。码道用本次同步刚认证成功的凭证作依据；
+  果办在写入凭证后一并解除。错误文案让用户点的那一下，从此真的有效。
+- **503 `unconfigured` 说明真实原因**：哪个账号、被停用了多久、上游最后报什么，
+  或"这个平台还没有配置任何账号"。不再把"被停用"和"从没配过账号"混成同一句。
+- **池快照新增 `disabledRemainingMs` / `blockedRemainingMs`**：停用是小时量级、冷却只有秒级，
+  此前快照只报冷却，卡片会对一个停用账号显示"还剩 0 分钟"。
 
 ## 1.3.0
 
-- First public release. CodeArts and OfficeAce routes, credit balances, per-model toggles, request shaping, and a local concurrency gate.
-- Published on GitHub at `wang111928/dsh-huawei-connect`.
+### 打包：成为可直接安装的 DSH 插件
+
+- **声明 DSH 兼容区间**：`engines.dsh: ">=0.1.7-rc.1 <0.3.0-0"`。此前只有 peer 范围、
+  且没有上界，宿主升到 0.3 也会被当成"兼容"。现在兼容性由这一条决定，装得上装不上
+  一眼可判（当前桌面端 `0.2.1-rc.5` 在区间内）。
+- **peer 范围收紧到与宿主同版本线**：`@deepseek-ai/dsh-*` 一律 `>=0.1.7-rc.1 <0.3.0-0`，
+  `@deepseek-ai/cordis` `>=4.0.4 <5.0.0`，`@deepseek-ai/schemastery` `>=3.18.4 <4.0.0`，
+  `@earendil-works/pi-ai` `>=0.85.1 <2.0.0` 并标为 optional，与同宿主上已验证可用的
+  `dsh-connect-trae@4.6.4` 一致。
+- **不再把 `@deepseek-ai/dsh-client-ui-primitives` 当成可安装的 peer 包**：它是 Web 前端的
+  静态种子模块（`staticModules`），不是 node_modules 里的包。客户端对它的依赖改由
+  `dsh.client.inject` 表达；服务端接受 `exports["./client"]` 即 `./lib/client/index.js`。
+- 修正 `market-entry.json` 中文描述里的平台名（「果道」→「码道」），安装指令换成可执行
+  的 `dsh plugin add` 形式，不再是让用户手工 clone 到 node_modules。
+
+### 安装形式
+
+三种，按可得性排序：
+
+1. 本地压缩包：`dsh plugin --profile <profile> add file:<path>/dsh-huawei-connect-1.3.0.tgz`
+2. npm 发布后：`dsh plugin --profile <profile> add dsh-huawei-connect@1.3.0`
+3. 固定提交的 git：`dsh plugin --profile <profile> add git+https://github.com/wang111928/dsh-huawei-connect.git#<40位提交>`
+
+### 客户端
+
+- 设置卡片改为按平台分栏（码道 / 果办两个 Tab，`role="tablist"`），只渲染当前选中
+  平台的那一块：两个平台都接的人不用再把整张长卡片从头翻到尾，一个平台的错误也不
+  再把另一个平台挤到屏幕外。默认选中第一个有数据的平台，选择在同一次渲染里沿用。
+
+## 1.2.0
+
+### 文档：修正安装方式（未发布 npm 前）
+
+- 安装改为 GitHub 源码 clone / 手动拷贝两种方式，移除对 npm registry 的依赖说明。
+- 修正 README 全文反引号转义，恢复代码块与行内代码渲染。
+- market-entry / awesome 列表 / PUBLISH-STEPS 同步改为 git 源安装。
+
+
+自带登录 + 账号池。插件不再依赖上游客户端已经登录过。
+
+### 浏览器登录（两个平台，一套引擎）
+
+- 移植了 `dsh-codearts` 的 OAuth2 流程：PKCE(S256) + DPoP(ES256) + 本机回环回调。
+- **实测发现果办的 client_id（`pdp5_for_agentarts`）同样接受
+  `http://127.0.0.1:<port>` 的本机回调**，所以两个平台共用同一套引擎，差异只有
+  client_id 与授权页拼法。
+- DPoP 私钥与 refresh_token 一起落盘（私钥丢了 refresh_token 就废了）。
+- 新增路由：`POST /api/huawei-connect/login`、`GET /login/status`、
+  `DELETE /accounts`。
+- 命令行：`node lib/bin.mjs login <codearts|officeace>`。
+
+### 自动续期
+
+- 实测验证：续期成功返回新 AK/SK + 轮换后的 refresh_token，有效期从 1.2h 延长到 2h。
+- **单飞**：同一账号并发续期只真正执行一次（refresh_token 一次性，并发会让账号坏掉）。
+- **失败降级**：续期失败但旧 token 未过期时继续用旧的，不让一次抖动毁掉能成功的请求。
+- `sync` 时会**接管**上游客户端的 refresh_token（origin 记为 `import+oauth`），
+  这样即使 `dsh-codearts` 被卸载，账号也不会两小时后失效。
+
+### 账号池
+
+- 每平台一个池：健康度（停用/冷却）、按"最少使用"轮转、按需续期。
+- 分类惩罚：认证失败→停用；积分耗尽→冷却 30 分钟；**并发撞墙→不惩罚**（容量问题，
+  踢掉好号只会更糟）；5xx→30 秒；TPM 限流→15 秒。
+- 状态接口新增 `pool` 字段，卡片显示每个账号的可用性与剩余时间。
+- 验证：两个账号 = 6 个并发槽，闸门与池配合正常。
+
+### 卡片
+
+- 每个平台分区新增「使用华为云账号登录」按钮、账号池列表、移除账号。
+
+## 1.1.0
+
+## 1.1.0
+
+上游加固（把"拒绝"变成"不会发生"）与上下文完善。所有改动都基于 2026-10-23 的实测，
+每条结论的探针方式记在 README §4/§5。
+
+### 修复的五个真实拒绝来源
+
+- **`max_tokens` 超限**：码道 >65536、果办 >131072 会在**流内**报参数非法
+  （`InferHub.001001005.400` / `ModelArts.81001`）。此时已开流、无法重放，整轮报废。
+  现在发送前钳制到实测上限。
+- **`developer` 角色**：pi-ai 对"非标准端点"默认认为支持 `developer` 角色，而 DSH
+  每轮都带 system 提示词、模型又被标为会推理 → 每一轮都发 `role: "developer"` →
+  码道 `InferHub.001001044.400 Message role cannot empty`。现在钉死
+  `supportsDeveloperRole: false`。
+- **图片发给纯文本模型**：码道 `001001020.406 not multimodal`、果办
+  `81001 unsupported content type`，都是硬拒绝且会让整个会话从此发不出去。现在按上游
+  `supports_images` 判定，发送前把图换成文字占位（切回多模态模型后照常发送）。
+- **并发超过 3 个会话**：`TM.00001041`。新增本地会话闸门（`gate.mjs`），同一账号
+  最多 3 个在飞，其余排队，按实测的 ~60s 释放时间占位。实测 5 并发全部成功、零拒绝。
+- **思考内容被丢弃**：`reasoning: false` 会让 pi-ai 静默丢掉 `reasoning_content`，
+  多轮工具调用时上游拿不到自己上一轮的推理。现在如实声明 `reasoning: true`，
+  档位限制在 `low`/`high`。
+
+### 上下文
+
+- **`contextWindow` 从 131072 改为 262144**。131072 会让 DSH 压缩器的预算算成
+  `131072 - 65536 - 65536 = 0`，压缩器直接抛错、压缩彻底失效——这是最初版本的真实缺陷。
+  262144 的三条校验（pressure/threshold/retain）全部通过。
+- 上限依据实测：约 62.5 万 token 仍 200，125 万 token 网关超时，250 万 token 参数非法。
+
+### 其它
+
+- 错误分类补上实测到的业务码（`001001044`/`001001020`/`ModelArts.81001`/
+  `ModelArts.81114`），并按类别给出不同退避时长。
+- 卡片新增"会话槽位"一行，槽位占满时直接说明原因与解法。
+- 模型能力改用上游的 `supports_images` 权威标记。
+- 多模态模型不再被 `display_enabled` 误过滤（它们 enable=true、真能出图）。
+
+## 1.0.0
+
+## 1.0.0
+首个可用版本。
+
+- 两条 provider 路由：`codearts`（码道 CodeArts）与 `officeace`（果办 OfficeAce）。
+- 积分余量：码道 `/snap-manager/v1/statistics/plugin`；果办本机控制面
+  `/api/subscription/current` + `/api/codeagent-package/usage`。
+- 模型勾选（写回 settings，适配器实时生效）。
+- 登录态自动发现：码道读 `dsh-codearts` 账号文件，果办读 Windows 凭据管理器（只读）。
+- 回环 shim：AK/SK 签名、Basic 认证、码道 SSE 逐帧翻译。
+- 请求伪装：身份头、字段白名单、不携带自身身份（依据见 README §4）。
+- 码道并发上限（3 会话/账号）按原地排队重试处理，而不是报错给用户。
+- 设置卡片：一个卡片两个分区，积分、模型、错误就地显示。
+- CLI：`status` / `models` / `sync`。

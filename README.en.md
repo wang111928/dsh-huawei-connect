@@ -1,44 +1,117 @@
 # DSH Huawei Connect
 
-Connect Huawei's two platforms to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH): **CodeArts** (coding) and **OfficeAce** (office suite). Both appear in DSH's model picker, each with credit balance, per-model toggles, and requests shaped like the official clients.
+Connect Huawei's two platforms to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH):
+**CodeArts** (coding) and **OfficeAce** (office suite). One setup, two provider routes,
+with credit balances, per-model toggles, and requests shaped like the official clients.
+
+## Features
+
+- **Two platforms, two routes**: `codearts` and `officeace` each appear in DSH's model picker.
+  Use one, or both at once.
+- **Credit balances**: CodeArts reads `/snap-manager/v1/statistics/plugin` (measured 10500 on the trial plan);
+  OfficeAce reads the local control plane `/api/subscription/current` (measured 4600) and
+  `/api/codeagent-package/usage`. The two platforms meter differently, so the card shows them separately.
+- **Per-model toggles, per platform**: the two tabs keep independent lists; ticks are written to host settings and the picker updates live. A tick means "explicitly allowed"; ticking nothing on a platform leaves that platform unrestricted (the card says so). Clicking a row changes only that row.
+- **Show/hide a platform**: each platform has its own "Hide models / Show models" button. It controls
+  whether that platform's models appear in the host picker at all — orthogonal to the ticks (which pick
+  *which* models). OfficeAce carries dozens of internal/experimental ids, so hiding the whole batch is
+  often what you want. Accounts, catalog and ticks are untouched. Stored as `showModels` in settings,
+  both on by default.
+- **Automatic credential discovery**: CodeArts reads the existing `dsh-codearts` account file;
+  OfficeAce reads Windows Credential Manager.
+- **Request shaping**: bodies and headers mirror the official clients so upstream channel
+  fingerprinting does not reject them.
+- **Credit readout in the composer**: a compact pill in the input toolbar (and a full-width row on
+  the new-conversation page) shows the live balance for the active platform.
+- **Auto-renewal**: CodeArts security tokens refresh before expiry and the new refresh token is
+  persisted immediately; credit reads fall back to the last successful snapshot when upstream is down.
+- **Model blacklist**: models advertised upstream but actually unreachable (403/404) are dropped
+  from the picker automatically instead of being retried.
+- **One-click activity claims** (CodeArts): the card lists claimable campaigns (daily check-in,
+  limited-time events) with their credit amounts and a single button to claim all. This uses
+  DevCloud's **web** ops API (`/chat/PromptCenterService/v1/ops/*`), which authenticates with the
+  **browser session cookie** — not the model IAM token. The card saves one pasted Cookie header and
+  verifies it immediately; re-paste when the session expires.
 
 ## Install
 
-Install from npm (published as [`dsh-huawei-connect`](https://www.npmjs.com/package/dsh-huawei-connect)):
+This is a standard DSH bundle: the host reads `dsh.bundle.patch` for the server half and
+`exports["./client"]` for the settings card in the browser. Installation therefore goes
+through the host's own plugin channel — never by copying files into `node_modules` by hand.
+
+Compatibility is declared once, as `engines.dsh: ">=0.1.7-rc.1 <0.3.0-0"`. A host outside
+that range refuses the install with a named reason instead of loading and crashing later.
+The current desktop runtime (`0.2.1-rc.5`) and `dsh web 0.2.1` are both inside it.
+
+### A. Install straight from the GitHub link (recommended; verified)
+
+```sh
+# the 1.3.4 release tag
+dsh plugin --profile <your profile> add github:wang111928/dsh-huawei-connect#v1.3.4
+# to pin one exact commit, swap #v1.3.4 for the 40-char SHA:
+#   ... add github:wang111928/dsh-huawei-connect#<40-char commit>
+```
+
+`dsh plugin` forwards its remaining arguments to pnpm inside the profile directory (its own
+help text says so), so any spec pnpm accepts works. Verified on a brand-new profile: the
+profile is initialized, the source is fetched from GitHub, and it finishes in about a minute
+reporting `+ dsh-huawei-connect 1.3.4`; the profile's `package.json` then records
+`git+https://github.com/wang111928/dsh-huawei-connect.git#v1.3.4`, which upgrade, uninstall and
+backup all honour. The first fetch occasionally times out — just retry.
+
+On DSH Desktop use its own **Settings → Plugins** flow instead: that profile belongs to the
+app's plugin manager, and the CLI cannot change it while the app is running. Enter the same
+spec in its Git/GitHub install field.
+
+### B. Tarball (offline, or when GitHub is unreachable)
+
+The tarball is attached to [Release v1.3.4](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4):
+[dsh-huawei-connect-1.3.4.tgz](https://github.com/wang111928/dsh-huawei-connect/releases/tag/v1.3.4/dsh-huawei-connect-1.3.4.tgz)
+(92,623 bytes, sha256 `50aa9ae52361aebb05958415e00df2306b620c857fb146a71cf5dfa20e691631`).
+
+```sh
+# once downloaded, point the host's own plugin installer at it:
+dsh plugin --profile <your profile> add file:/absolute/path/dsh-huawei-connect-1.3.4.tgz
+```
+
+On DSH Desktop pick "install from local tarball" and point it at the same `.tgz`.
+
+### C. npm (not published yet)
 
 ```sh
 dsh plugin --profile <your profile> add dsh-huawei-connect@1.3.4
 ```
 
-Other install methods are also supported:
+Then open **Settings → Plugins → DSH Huawei Connect**, sign in to either platform, and pick models.
 
-```sh
-# from the GitHub tag (verified)
-dsh plugin --profile <your profile> add github:wang111928/dsh-huawei-connect#v1.3.4
-# or from a local tarball
-dsh plugin --profile <your profile> add file:/absolute/path/dsh-huawei-connect-1.3.4.tgz
-```
+## Image input
 
-On DSH Desktop, use **Settings → Plugins** and enter the same spec in the Git/GitHub or local-tarball install field.
+DSH sends images as OpenAI `image_url` parts with a base64 data URL; the plugin forwards them
+unchanged, and CodeArts multimodal models **do** decode them (verified 2026-11-12: a 256×256
+test image asked "which colours?" came back "red, blue").
+
+Capability is decided by a measured table (`CODEARTS_IMAGE_VERDICT`) first, then the upstream
+`supports_images` flag for unknown models, then id heuristics. Measured results:
+`deepseek-v4.1-flash`, `kimi-k3`, `kimi-k3.1-pro`, `glm-5.3-flash` accept images;
+`GLM-5.2`, `glm-5.3`, `openpangu-2.0-pro/flash` reject them with `001001020 not multimodal`.
+**OfficeAce is text-only as a gateway** (`81001 unsupported content type: 'image_url'`), so its
+models always strip images into a text placeholder.
+
+If the upstream rejects an image anyway, the plugin downgrades that model to text-only
+(in-memory plus `~/.dsh/.huawei-connect/image-refused-models.json`), so the **next** turn strips
+the image before sending instead of failing forever on the image left in history.
 
 ## Requirements
 
-- DeepSeek Harness `>=0.1.7-rc.1 <0.3.0-0` (declared in the plugin's `engines.dsh`; a host outside this range refuses the install)
+- CodeArts signs its requests with `SDK-HMAC-SHA256`. If a body-rewriting proxy sits in front
+  (e.g. `billion-context` on the same machine), it must be told to forward them untouched:
+  `{"resign":{"sdk-hmac-sha256":{"passthrough":true}}}` in its config, or
+  `BILI_RESIGN_PASSTHROUGH=1`. Otherwise every turn fails, and the host UI may report it as
+  "invalid API key" — that is an error classifier reading the refused signature as an auth
+  failure, not a problem with your account (fixed on our side in 1.3.3).
+- DeepSeek Harness 0.2.1 or newer
 - Node.js `^22.19.0 || >=24.0.0`
-- Windows for OfficeAce (it reads the Windows Credential Manager); CodeArts works cross-platform
-- CodeArts: sign in once via the CodeArts desktop client or `dsh-codearts`. OfficeAce: the desktop app must be running and signed in on Windows
-
-After install, open **Settings → Plugins → DSH Huawei Connect**, sign in to either platform, and pick models from the model picker.
-
-## Features
-
-- **Two platforms, two routes** — `codearts` and `officeace` each show up in the model picker; use one or both.
-- **Credit balances** — the card shows each account's remaining credits, metered per platform.
-- **Per-model toggles, per platform** — each tab keeps its own list; ticks are written to host settings and the picker updates live. A tick means "explicitly allowed"; ticking nothing leaves that platform unrestricted.
-- **Automatic credential discovery** — CodeArts reuses the existing `dsh-codearts` account; OfficeAce reads the Windows Credential Manager. Both are read-only and never require re-login.
-- **Request shaping** — bodies and headers mirror the official clients so upstream channel fingerprinting does not reject them.
-- **Auto-renewal** — CodeArts security tokens refresh before expiry; credit reads fall back to the last good snapshot when upstream is down.
-- **Model blacklist** — models advertised upstream but actually unreachable (403/404) are dropped from the picker automatically.
+- Windows for OfficeAce (it reads Windows Credential Manager); CodeArts works cross-platform
 
 ## License
 
