@@ -2,7 +2,7 @@
   "name": "dsh-huawei-connect",
   "displayName": "DSH Huawei Connect",
   "description": "把华为「码道 CodeArts」与「果办 OfficeAce」两个平台的模型接入 DeepSeek Harness：一处登录、积分余量与模型勾选、官方客户端同形态的请求伪装，避免被上游按渠道指纹拒绝。",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "author": "wang111928",
   "license": "MIT",
   "keywords": [
